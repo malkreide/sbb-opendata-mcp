@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "sbb-opendata": {
+      "command": "uvx",
+      "args": [
+        "sbb-opendata-mcp"
+      ]
+    }
+  }
+}
