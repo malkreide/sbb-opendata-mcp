@@ -1,8 +1,8 @@
 # SBB Open Data MCP Server
 
-**Deutsch** | [English](#english)
+[🇩🇪 Deutsch](README.de.md) | 🇬🇧 English
 
-Ein Model Context Protocol (MCP) Server für die offenen Daten der Schweizerischen Bundesbahnen (SBB) via [data.sbb.ch](https://data.sbb.ch). Kein API-Key erforderlich.
+An [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server for Swiss Federal Railways (SBB) open data via [data.sbb.ch](https://data.sbb.ch). No API key required.
 
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -10,30 +10,46 @@ Ein Model Context Protocol (MCP) Server für die offenen Daten der Schweizerisch
 
 ---
 
-## Verfügbare Tools (9)
+## What is this?
 
-| Tool | Beschreibung | Aktualisierung |
-|------|-------------|----------------|
-| `sbb_get_passenger_frequency` | Ein-/Aussteigende nach Bahnhof und Jahr | Jährlich |
-| `sbb_get_rail_disruptions` | Live-Bahnverkehrsmeldungen | Alle 5 Min. |
-| `sbb_get_infrastructure_construction_projects` | Infrastruktur-Bauprojekte | Laufend |
-| `sbb_get_real_estate_projects` | Immobilien-Bauprojekte der SBB | Täglich |
-| `sbb_get_trains_per_segment` | Zugzahlen pro Streckenabschnitt | Jährlich |
-| `sbb_get_platform_data` | Perrondaten (Länge, Typ, Fläche) | Laufend |
-| `sbb_get_rolling_stock` | Rollmaterial (Kapazität, Baujahr) | Laufend |
-| `sbb_compare_stations` | Mehrere Bahnhöfe vergleichen | – |
-| `sbb_search_stations` | Haltestellen suchen (DiDok-Liste BAV) | Laufend |
-| `sbb_list_datasets` | Alle ~89 SBB Open Data Datensätze | – |
+This server connects AI models (Claude, GPT-4, Llama, etc.) directly to public SBB data — no copy-pasting or manual API calls required. A question like *"How many passengers passed through Zürich HB every day in 2024?"* is answered with real measured data.
+
+The server is model-agnostic and works with any MCP-compatible client.
+
+---
+
+## Available Tools (10)
+
+| Tool | Description | Data Update |
+|------|-------------|-------------|
+| `sbb_get_passenger_frequency` | Boardings/alightings by station and year (daily avg.) | Annual |
+| `sbb_get_rail_disruptions` | Live rail traffic messages | Every 5 min. |
+| `sbb_get_infrastructure_construction_projects` | Infrastructure construction (stations, lines) | Ongoing |
+| `sbb_get_real_estate_projects` | SBB real estate development projects | Daily |
+| `sbb_get_trains_per_segment` | Train counts per route segment (SBB, BLS, SOB …) | Annual |
+| `sbb_get_platform_data` | Platform data (length, type, area) | Ongoing |
+| `sbb_get_rolling_stock` | Rolling stock (capacity, year built) | Ongoing |
+| `sbb_compare_stations` | Compare up to 10 stations (multi-dataset) | – |
+| `sbb_search_stations` | Search stops (Swiss DiDok register, all CH) | Ongoing |
+| `sbb_list_datasets` | List all ~89 SBB open datasets | – |
+
+All tools support `response_format: "markdown"` (human-readable) and `"json"` (machine-readable), plus pagination.
 
 ---
 
 ## Installation
 
+### Prerequisites
+
+Install [uv](https://github.com/astral-sh/uv):
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
 ### Claude Desktop (stdio)
 
-Voraussetzung: [uv](https://github.com/astral-sh/uv) installiert.
-
-Konfigurationsdatei öffnen:
+Open the config file:
 - **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
 
@@ -48,20 +64,15 @@ Konfigurationsdatei öffnen:
 }
 ```
 
-### Andere MCP-Clients (Cursor, Windsurf, VS Code + Continue, LibreChat)
+Restart Claude Desktop. The server is downloaded automatically on first use.
 
-```json
-{
-  "mcpServers": {
-    "sbb-opendata": {
-      "command": "uvx",
-      "args": ["sbb-opendata-mcp"]
-    }
-  }
-}
-```
+### Other MCP Clients
 
-### Cloud-Deployment (Streamable HTTP / Render.com)
+Works with Cursor, Windsurf, VS Code + Continue, LibreChat, Cline and self-hosted models via `mcp-proxy` — same configuration as above.
+
+### Cloud Deployment (Streamable HTTP)
+
+For remote servers (e.g. [Render.com](https://render.com)):
 
 ```bash
 git clone https://github.com/malkreide/sbb-opendata-mcp
@@ -70,91 +81,69 @@ pip install -e .
 python -m sbb_opendata_mcp.server --http --port 8000
 ```
 
-### Lokale Entwicklung
+### Local Development
 
 ```bash
 git clone https://github.com/malkreide/sbb-opendata-mcp
 cd sbb-opendata-mcp
 pip install -e ".[dev]"
 
-# Tests ausführen
+# Unit tests (no network required)
 PYTHONPATH=src pytest tests/ -v -m "not live"
 
-# Live API Tests
+# Live API smoke tests
 PYTHONPATH=src pytest tests/ -v -m live
 ```
 
 ---
 
-## Beispielabfragen
+## Example Queries
 
 ```
-"Wie viele Personen stiegen 2024 täglich in Zürich HB ein und aus?"
+"How many people boarded at Zürich HB daily in 2024?"
 → sbb_get_passenger_frequency(station_name="Zürich HB", year="2024")
 
-"Gibt es aktuell Störungen auf dem Schweizer Bahnnetz?"
+"Are there any current disruptions on the Swiss rail network?"
 → sbb_get_rail_disruptions(limit=10)
 
-"Vergleiche die Bahnhöfe Zürich HB, Bern und Basel SBB anhand Passagierfrequenz."
+"Compare Zürich HB, Bern and Basel SBB by passenger frequency and platform capacity."
 → sbb_compare_stations(stations=["Zürich HB", "Bern", "Basel SBB"], year="2024")
 
-"Welche SBB-Bauprojekte laufen in Zürich?"
+"Which SBB construction projects are active in Zürich?"
 → sbb_get_infrastructure_construction_projects(city="Zürich")
 
-"Wie viele Züge fahren täglich auf der Strecke Zürich–Winterthur?"
+"How many trains run daily on the Zürich–Winterthur route?"
 → sbb_get_trains_per_segment(line_name="Zürich", operator="SBB", year="2025")
+
+"Which stops exist in Wädenswil?"
+→ sbb_search_stations(query="Wädenswil", canton="ZH")
 ```
 
 ---
 
-## Datenbasis
+## Data & License
 
-Alle Daten stammen vom [SBB Open Data Portal](https://data.sbb.ch) (OpenDataSoft). 
-Lizenz: [NonCommercialAllowed-CommercialAllowed-ReferenceRequired](https://data.sbb.ch/page/licence)
+All data is sourced from the [SBB Open Data Portal](https://data.sbb.ch) (OpenDataSoft REST API v2.1).  
+Data license: [NonCommercialAllowed-CommercialAllowed-ReferenceRequired](https://data.sbb.ch/page/licence)
 
-Dieses Projekt steht unter der **MIT-Lizenz** und ist Teil der Open Source MCP-Portfolio unter [github.com/malkreide](https://github.com/malkreide).
-
----
-
-## Passung zu anderen MCP-Servern
-
-| Server | Ergänzung durch SBB Open Data |
-|--------|-------------------------------|
-| [swiss-transport-mcp](https://github.com/malkreide/swiss-transport-mcp) | Historische Tiefe: Warum ist eine Station wichtig? Passagierkontext zu Echtzeit-Abfragen |
-| [swiss-road-mobility-mcp](https://github.com/malkreide/swiss-road-mobility-mcp) | Multimodale Perspektive: Bahn-Hub + Mikromobilität/E-Laden |
-| [zurich-opendata-mcp](https://github.com/malkreide/zurich-opendata-mcp) | Cross-referenz: Zürcher Haltestellen mit städtischen Schul-/Bevölkerungsdaten |
+This server is released under the **MIT License** and is part of the open source MCP portfolio at [github.com/malkreide](https://github.com/malkreide).
 
 ---
 
-<a name="english"></a>
-## English
+## Relationship to Other MCP Servers
 
-An MCP Server for Swiss Federal Railways (SBB) open data via [data.sbb.ch](https://data.sbb.ch). No API key required.
+| Server | How SBB Open Data Complements It |
+|--------|----------------------------------|
+| [swiss-transport-mcp](https://github.com/malkreide/swiss-transport-mcp) | Historical depth: passenger context for real-time timetable queries |
+| [swiss-road-mobility-mcp](https://github.com/malkreide/swiss-road-mobility-mcp) | Multimodal view: rail hub + micromobility/EV charging |
+| [zurich-opendata-mcp](https://github.com/malkreide/zurich-opendata-mcp) | Cross-reference: Zurich stops combined with city population and school data |
 
-### Available Tools
+---
 
-- **Passenger frequency** by station and year
-- **Live rail disruptions** (updated every 5 minutes)
-- **Infrastructure construction projects**
-- **Real estate projects** (updated daily)
-- **Trains per route segment**
-- **Platform data** (length, type, area)
-- **Rolling stock** (capacity, year built)
-- **Station comparison** (multi-dataset, up to 10 stations)
-- **Station search** (Swiss DiDok register, all CH stops)
-- **List all datasets** (~89 available)
+## Technical Details
 
-### Quick Start
-
-```json
-{
-  "mcpServers": {
-    "sbb-opendata": {
-      "command": "uvx",
-      "args": ["sbb-opendata-mcp"]
-    }
-  }
-}
-```
-
-All data: [data.sbb.ch](https://data.sbb.ch) | OpenDataSoft REST API v2.1 | No authentication needed.
+- **Framework:** [FastMCP](https://github.com/modelcontextprotocol/python-sdk) + httpx + Pydantic v2
+- **Transport:** stdio (local) and Streamable HTTP (cloud)
+- **Python:** 3.11, 3.12, 3.13
+- **Tests:** 34 unit tests + 5 live API smoke tests
+- **API:** [OpenDataSoft REST v2.1](https://data.sbb.ch/api/explore/v2.1/) — no authentication needed
