@@ -347,30 +347,73 @@ class TestLogging:
                     return {"total_count": 3, "results": []}
 
             class _Client:
-                def __init__(self, *a, **k):
-                    pass
-
-                async def __aenter__(self):
-                    return self
-
-                async def __aexit__(self, *a):
-                    return False
-
-                def build_request(self, *a, **k):
-                    return object()
-
-                async def send(self, _req):
+                async def get(self, *a, **k):
                     return _Resp()
 
             from sbb_opendata_mcp import server
 
-            with patch.object(server.httpx, "AsyncClient", _Client):
+            with patch.object(server, "_get_client", AsyncMock(return_value=_Client())):
                 await server._fetch_records("perron", limit=5)
         finally:
             logger.removeHandler(handler)
             logger.setLevel(prev)
         msgs = [r.getMessage() for r in records]
         assert "upstream_response" in msgs
+
+
+class TestSharedClient:
+    """F-SCALE-01: shared httpx client + concurrent fan-out."""
+
+    @pytest.mark.asyncio
+    async def test_get_client_returns_singleton(self):
+        from sbb_opendata_mcp import server
+
+        await server._aclose_client()
+        try:
+            c1 = await server._get_client()
+            c2 = await server._get_client()
+            assert c1 is c2
+            assert isinstance(c1, httpx.AsyncClient)
+            assert c1.is_closed is False
+        finally:
+            await server._aclose_client()
+
+    @pytest.mark.asyncio
+    async def test_aclose_client_closes_and_recreates(self):
+        from sbb_opendata_mcp import server
+
+        c1 = await server._get_client()
+        await server._aclose_client()
+        assert c1.is_closed is True
+        c2 = await server._get_client()
+        assert c2 is not c1
+        await server._aclose_client()
+
+    @pytest.mark.asyncio
+    async def test_compare_stations_fans_out_concurrently(self):
+        """All per-station fetches should be in flight at once, not serialized."""
+        import asyncio
+
+        in_flight = 0
+        peak = 0
+
+        async def slow_fetch(dataset_id, **kwargs):
+            nonlocal in_flight, peak
+            in_flight += 1
+            peak = max(peak, in_flight)
+            await asyncio.sleep(0.02)
+            in_flight -= 1
+            if "passagier" in dataset_id:
+                return mock_api_response([MOCK_PASSENGER_RECORD])
+            return mock_api_response([MOCK_PLATFORM_RECORD])
+
+        with patch("sbb_opendata_mcp.server._fetch_records", side_effect=slow_fetch):
+            result = await sbb_compare_stations(
+                CompareStationsInput(stations=["Zürich HB", "Bern", "Basel SBB"], year="2024")
+            )
+        assert "Zürich HB" in result or "Bern" in result
+        # 3 stations running concurrently → peak well above 1.
+        assert peak >= 3
 
 
 # ---------------------------------------------------------------------------
