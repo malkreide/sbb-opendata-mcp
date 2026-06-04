@@ -36,6 +36,13 @@ dependencies = [
     "pydantic>=2.0.0,<3",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.4.0",
+]
+
 [project.scripts]
 sbb-opendata-mcp = "sbb_opendata_mcp.server:mcp.run"
 
@@ -62,6 +69,9 @@ fmt = "ruff format src/ tests/"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "live: integration tests that hit the live data.sbb.ch API (require network)",
+]
 
 [tool.ruff]
 line-length = 110
