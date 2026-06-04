@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Performance
+- **F-SCALE-01:** Ein gemeinsamer, langlebiger `httpx.AsyncClient` (Connection-Pooling
+  mit Keep-Alive) ersetzt das bisherige Anlegen eines neuen Clients pro Request; der
+  Client wird beim Server-Shutdown über einen Lifespan-Hook geschlossen. `compare_stations`
+  ruft die Stationen jetzt nebenläufig via `asyncio.gather` ab (vorher 2×N sequentielle
+  Requests).
+
 ### Observability
 - **F-OBS-01:** Strukturiertes Logging ergänzt. Package-Logger `sbb_opendata_mcp`
   mit Handler auf **stderr** (stdout bleibt dem stdio-JSON-RPC-Kanal vorbehalten).

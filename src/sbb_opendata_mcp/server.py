@@ -4,11 +4,14 @@ Provides access to Swiss Federal Railways (SBB) open data via the OpenDataSoft A
 No API key required. Data from data.sbb.ch.
 """
 
+import asyncio
 import json
 import logging
 import os
 import sys
 import time
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from enum import StrEnum
 from typing import Any
 
@@ -128,6 +131,15 @@ def _transport_security() -> TransportSecuritySettings:
     )
 
 
+@asynccontextmanager
+async def _lifespan(_server: FastMCP) -> AsyncIterator[dict[str, Any]]:
+    """Close the shared HTTP client when the server shuts down."""
+    try:
+        yield {}
+    finally:
+        await _aclose_client()
+
+
 mcp = FastMCP(
     "sbb_opendata_mcp",
     instructions=(
@@ -139,6 +151,7 @@ mcp = FastMCP(
     host=os.environ.get("MCP_HOST", "127.0.0.1"),
     port=int(os.environ.get("MCP_PORT", "8000")),
     transport_security=_transport_security(),
+    lifespan=_lifespan,
 )
 
 # ---------------------------------------------------------------------------
@@ -153,6 +166,34 @@ def _odsql_quote(value: str) -> str:
     can never break out of the surrounding ``"..."`` literal in a ``where`` clause.
     """
     return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+# Single shared client so connections (TCP/TLS) are pooled and reused across
+# tool calls instead of being re-established on every request.
+_client: httpx.AsyncClient | None = None
+_client_lock = asyncio.Lock()
+
+
+async def _get_client() -> httpx.AsyncClient:
+    """Return the shared httpx client, creating it on first use."""
+    global _client
+    if _client is None or _client.is_closed:
+        async with _client_lock:
+            if _client is None or _client.is_closed:
+                _client = httpx.AsyncClient(
+                    timeout=DEFAULT_TIMEOUT,
+                    limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+                    headers={"User-Agent": "sbb-opendata-mcp"},
+                )
+    return _client
+
+
+async def _aclose_client() -> None:
+    """Close the shared client if it exists (called on server shutdown)."""
+    global _client
+    if _client is not None and not _client.is_closed:
+        await _client.aclose()
+    _client = None
 
 
 async def _fetch_records(
@@ -175,11 +216,10 @@ async def _fetch_records(
 
     _log(logging.DEBUG, "upstream_request", dataset=dataset_id, limit=params["limit"], offset=offset)
     started = time.monotonic()
-    async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as client:
-        response = client.build_request("GET", url, params=params)
-        r = await client.send(response)
-        r.raise_for_status()
-        data = r.json()
+    client = await _get_client()
+    r = await client.get(url, params=params)
+    r.raise_for_status()
+    data = r.json()
     _log(
         logging.INFO,
         "upstream_response",
@@ -1000,16 +1040,20 @@ async def sbb_compare_stations(params: CompareStationsInput) -> str:
         results_by_station: dict[str, dict] = {s: {"name": s} for s in params.stations}
         year_filter = params.year or "2024"
 
-        # Fetch passenger frequency for all stations
-        for station in params.stations:
+        async def _collect(station: str) -> tuple[str, dict[str, Any]]:
+            """Fetch passenger frequency and platform data for one station."""
+            info: dict[str, Any] = {}
             escaped = _odsql_quote(station)
-            where = f'bahnhof_gare_stazione like "%{escaped}%" AND year(jahr_annee_anno)={year_filter}'
-            data = await _fetch_records(
-                DATASET_PASSENGER_FREQUENCY, where=where, order_by="dtv_tjm_tgm desc", limit=1
+
+            freq = await _fetch_records(
+                DATASET_PASSENGER_FREQUENCY,
+                where=f'bahnhof_gare_stazione like "%{escaped}%" AND year(jahr_annee_anno)={year_filter}',
+                order_by="dtv_tjm_tgm desc",
+                limit=1,
             )
-            if data.get("results"):
-                r = data["results"][0]
-                results_by_station[station].update(
+            if freq.get("results"):
+                r = freq["results"][0]
+                info.update(
                     {
                         "matched_name": r.get("bahnhof_gare_stazione"),
                         "year": r.get("jahr_annee_anno"),
@@ -1019,20 +1063,21 @@ async def sbb_compare_stations(params: CompareStationsInput) -> str:
                     }
                 )
 
-        # Fetch platform counts for all stations
-        for station in params.stations:
-            escaped = _odsql_quote(station)
-            where = f'bps_name like "%{escaped}%"'
-            data = await _fetch_records(DATASET_PLATFORMS, where=where, limit=50)
-            if data.get("results"):
-                perrons = data["results"]
+            plat = await _fetch_records(DATASET_PLATFORMS, where=f'bps_name like "%{escaped}%"', limit=50)
+            if plat.get("results"):
+                perrons = plat["results"]
                 total_length = sum(r.get("p_lange", 0) or 0 for r in perrons)
-                results_by_station[station].update(
+                info.update(
                     {
                         "platform_count": len(perrons),
                         "total_platform_length_m": int(total_length),
                     }
                 )
+            return station, info
+
+        # Fan out across stations concurrently (was 2×N sequential requests).
+        for station, info in await asyncio.gather(*(_collect(s) for s in params.stations)):
+            results_by_station[station].update(info)
 
         lines = [f"## Bahnhofvergleich ({year_filter})\n"]
         lines.append("| Bahnhof | Kanton | DTV (tägl.) | DWV (werktags) | Perrons | Gesamtlänge (m) |")
@@ -1149,10 +1194,10 @@ async def sbb_list_datasets() -> str:
         url = "https://data.sbb.ch/api/explore/v2.1/catalog/datasets"
         params = {"limit": 100, "order_by": "metas.default.title asc"}
 
-        async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as client:
-            r = await client.get(url, params=params)
-            r.raise_for_status()
-            data = r.json()
+        client = await _get_client()
+        r = await client.get(url, params=params)
+        r.raise_for_status()
+        data = r.json()
 
         results = data.get("results", [])
         total = data.get("total_count", 0)
