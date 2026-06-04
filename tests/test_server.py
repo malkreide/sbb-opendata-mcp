@@ -4,6 +4,7 @@ Drei Kategorien: Unit-Tests (Mock), Integration-Tests (Live API), Smoke-Tests.
 """
 
 import json
+import logging
 import os
 import sys
 from unittest.mock import AsyncMock, patch
@@ -269,6 +270,107 @@ class TestTransportSecurity:
         ts = _transport_security()
         assert ts.allowed_hosts == ["sbb.example.com", "sbb.example.com:*"]
         assert ts.allowed_origins == ["https://sbb.example.com"]
+
+
+class TestLogging:
+    """F-OBS-01: structured logging / observability."""
+
+    def _capture(self):
+        """Attach a list-collecting handler to the package logger."""
+        from sbb_opendata_mcp.server import logger
+
+        records: list[logging.LogRecord] = []
+        handler = logging.Handler()
+        handler.emit = records.append
+        logger.addHandler(handler)
+        prev_level = logger.level
+        logger.setLevel(logging.DEBUG)
+        return logger, handler, records, prev_level
+
+    def test_configure_logging_idempotent_and_stderr(self):
+        from sbb_opendata_mcp.server import configure_logging, logger
+
+        before = len(logger.handlers)
+        configure_logging()  # already configured at import — must not duplicate
+        assert len(logger.handlers) == before
+        stream_handlers = [h for h in logger.handlers if isinstance(h, logging.StreamHandler)]
+        assert stream_handlers, "expected a stream handler"
+        # Logs must never go to stdout (stdio JSON-RPC channel).
+        assert all(h.stream is sys.stderr for h in stream_handlers)
+        assert logger.propagate is False
+
+    def test_json_formatter_outputs_valid_json(self):
+        from sbb_opendata_mcp.server import _JsonFormatter
+
+        rec = logging.LogRecord("sbb_opendata_mcp", logging.INFO, __file__, 1, "hello", None, None)
+        rec.fields = {"dataset": "perron", "status": 200}
+        parsed = json.loads(_JsonFormatter().format(rec))
+        assert parsed["msg"] == "hello"
+        assert parsed["level"] == "INFO"
+        assert parsed["dataset"] == "perron"
+        assert parsed["status"] == 200
+
+    def test_handle_api_error_logs_http_status(self):
+        logger, handler, records, prev = self._capture()
+        try:
+            mock_resp = AsyncMock()
+            mock_resp.status_code = 429
+            mock_resp.text = "rate limit"
+            err = httpx.HTTPStatusError("429", request=AsyncMock(), response=mock_resp)
+            _handle_api_error(err)
+        finally:
+            logger.removeHandler(handler)
+            logger.setLevel(prev)
+        assert any(r.getMessage() == "upstream_http_error" for r in records)
+
+    def test_handle_api_error_logs_generic_at_error_level(self):
+        logger, handler, records, prev = self._capture()
+        try:
+            _handle_api_error(ValueError("boom"))
+        finally:
+            logger.removeHandler(handler)
+            logger.setLevel(prev)
+        assert any(r.levelno >= logging.ERROR for r in records)
+
+    @pytest.mark.asyncio
+    async def test_fetch_records_logs_response(self):
+        logger, handler, records, prev = self._capture()
+        try:
+
+            class _Resp:
+                status_code = 200
+
+                def raise_for_status(self):
+                    return None
+
+                def json(self):
+                    return {"total_count": 3, "results": []}
+
+            class _Client:
+                def __init__(self, *a, **k):
+                    pass
+
+                async def __aenter__(self):
+                    return self
+
+                async def __aexit__(self, *a):
+                    return False
+
+                def build_request(self, *a, **k):
+                    return object()
+
+                async def send(self, _req):
+                    return _Resp()
+
+            from sbb_opendata_mcp import server
+
+            with patch.object(server.httpx, "AsyncClient", _Client):
+                await server._fetch_records("perron", limit=5)
+        finally:
+            logger.removeHandler(handler)
+            logger.setLevel(prev)
+        msgs = [r.getMessage() for r in records]
+        assert "upstream_response" in msgs
 
 
 # ---------------------------------------------------------------------------
