@@ -209,6 +209,67 @@ class TestInputModels:
         p = RailDisruptionsInput(response_format="json")
         assert p.response_format == ResponseFormat.JSON
 
+    # --- F-SEC-01: input validation hardening ---
+
+    def test_year_must_be_four_digits(self):
+        PassengerFrequencyInput(year="2024")  # valid
+        for bad in ["2024 OR 1=1", "2024) OR (1=1", "24", "abcd", "20245"]:
+            with pytest.raises(Exception):
+                PassengerFrequencyInput(year=bad)
+
+    def test_trains_year_must_be_four_digits(self):
+        with pytest.raises(Exception):
+            TrainsPerSegmentInput(year='2025" OR "1"="1')
+
+    def test_compare_year_must_be_four_digits(self):
+        with pytest.raises(Exception):
+            CompareStationsInput(stations=["Zürich HB", "Bern"], year="2024 OR 1=1")
+
+    def test_canton_must_be_two_letters(self):
+        PassengerFrequencyInput(canton="ZH")  # valid
+        for bad in ['Z"', "Z1", "12"]:
+            with pytest.raises(Exception):
+                PassengerFrequencyInput(canton=bad)
+
+
+class TestOdsqlQuote:
+    def test_escapes_double_quote(self):
+        from sbb_opendata_mcp.server import _odsql_quote
+
+        assert _odsql_quote('a"b') == 'a\\"b'
+
+    def test_escapes_backslash_before_quote(self):
+        from sbb_opendata_mcp.server import _odsql_quote
+
+        # Backslash escaped first so a trailing escape cannot be neutralised.
+        assert _odsql_quote('a\\"b') == 'a\\\\\\"b'
+
+    def test_plain_value_unchanged(self):
+        from sbb_opendata_mcp.server import _odsql_quote
+
+        assert _odsql_quote("Zürich HB") == "Zürich HB"
+
+
+class TestTransportSecurity:
+    def test_defaults_to_localhost_with_protection(self, monkeypatch):
+        from sbb_opendata_mcp.server import _transport_security
+
+        monkeypatch.delenv("MCP_ALLOWED_HOSTS", raising=False)
+        monkeypatch.delenv("MCP_ALLOWED_ORIGINS", raising=False)
+        ts = _transport_security()
+        assert ts.enable_dns_rebinding_protection is True
+        assert "127.0.0.1" in ts.allowed_hosts
+        assert "localhost" in ts.allowed_hosts
+
+    def test_env_overrides_allowed_hosts_and_origins(self, monkeypatch):
+        from sbb_opendata_mcp.server import _transport_security
+
+        monkeypatch.setenv("MCP_ALLOWED_HOSTS", "sbb.example.com, sbb.example.com:*")
+        monkeypatch.setenv("MCP_ALLOWED_ORIGINS", "https://sbb.example.com")
+        ts = _transport_security()
+        assert ts.allowed_hosts == ["sbb.example.com", "sbb.example.com:*"]
+        assert ts.allowed_origins == ["https://sbb.example.com"]
+
 
 # ---------------------------------------------------------------------------
 # Unit Tests: Tool outputs (mocked API)
