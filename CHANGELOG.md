@@ -1,5 +1,18 @@
 # Changelog
 
+## [Unreleased]
+
+### Security
+- **F-SEC-01:** ODSQL-Injection gehärtet. `year`-/`canton`-Parameter werden jetzt per
+  Regex (`^\d{4}$` / `^[A-Za-z]{2}$`) validiert, und alle in die `where`-Klausel
+  interpolierten String-Werte (inkl. zuvor ungeescapter `operator`, `phase`,
+  `traffic_type`) laufen über einen zentralen `_odsql_quote()`-Escaper (Backslash + Quote).
+- **F-SEC-02:** Streamable-HTTP-Transport gehärtet. DNS-Rebinding-/Origin-Schutz ist
+  aktiviert; Bind-Host und Host/Origin-Allowlists sind über `MCP_HOST`,
+  `MCP_ALLOWED_HOSTS` und `MCP_ALLOWED_ORIGINS` konfigurierbar (Default: `127.0.0.1`,
+  localhost erlaubt). Fehlerhaften HTTP-Entry-Point korrigiert
+  (`transport="streamable-http"`, Port via Settings).
+
 ## [0.1.0] — 2026-03-08
 
 ### Erstveröffentlichung / Initial Release

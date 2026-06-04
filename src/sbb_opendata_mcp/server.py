@@ -5,11 +5,13 @@ No API key required. Data from data.sbb.ch.
 """
 
 import json
+import os
 from enum import StrEnum
 from typing import Any
 
 import httpx
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, ConfigDict, Field
 
 # ---------------------------------------------------------------------------
@@ -20,6 +22,16 @@ BASE_URL = "https://data.sbb.ch/api/explore/v2.1/catalog/datasets"
 DEFAULT_TIMEOUT = 30.0
 DEFAULT_LIMIT = 20
 MAX_LIMIT = 100
+
+# Validation patterns for parameters that flow into the ODSQL `where` clause.
+YEAR_PATTERN = r"^\d{4}$"
+CANTON_PATTERN = r"^[A-Za-z]{2}$"
+
+# Streamable HTTP transport hardening (DNS-rebinding / Origin protection).
+# Localhost is allowed by default so local HTTP development keeps working;
+# for a public deployment set MCP_ALLOWED_HOSTS / MCP_ALLOWED_ORIGINS and
+# bind via MCP_HOST (e.g. 0.0.0.0 behind a rate-limiting reverse proxy).
+DEFAULT_ALLOWED_HOSTS = ["127.0.0.1", "127.0.0.1:*", "localhost", "localhost:*"]
 
 # Dataset IDs
 DATASET_PASSENGER_FREQUENCY = "passagierfrequenz"
@@ -39,19 +51,51 @@ DATASET_LINES = "linie"
 # Server init
 # ---------------------------------------------------------------------------
 
+
+def _env_list(name: str) -> list[str]:
+    """Parse a comma-separated environment variable into a clean list."""
+    return [v.strip() for v in os.environ.get(name, "").split(",") if v.strip()]
+
+
+def _transport_security() -> TransportSecuritySettings:
+    """Build DNS-rebinding / Origin protection for the Streamable HTTP transport.
+
+    DNS-rebinding protection is always enabled. Hosts default to localhost so
+    local HTTP dev works out of the box; override via MCP_ALLOWED_HOSTS /
+    MCP_ALLOWED_ORIGINS (comma-separated) for a public deployment.
+    """
+    return TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=_env_list("MCP_ALLOWED_HOSTS") or list(DEFAULT_ALLOWED_HOSTS),
+        allowed_origins=_env_list("MCP_ALLOWED_ORIGINS"),
+    )
+
+
 mcp = FastMCP(
     "sbb_opendata_mcp",
     instructions=(
         "SBB Open Data MCP Server: Access Swiss Federal Railways open data. "
         "Covers passenger frequency, live rail disruptions, infrastructure construction, "
         "real estate projects, trains per segment, platform data, rolling stock, and more. "
-        "All data from data.sbb.ch — no authentication required."
+        "All data from data.sbb.ch — no API key required."
     ),
+    host=os.environ.get("MCP_HOST", "127.0.0.1"),
+    port=int(os.environ.get("MCP_PORT", "8000")),
+    transport_security=_transport_security(),
 )
 
 # ---------------------------------------------------------------------------
 # Shared API client
 # ---------------------------------------------------------------------------
+
+
+def _odsql_quote(value: str) -> str:
+    """Escape a string for safe inclusion inside an ODSQL double-quoted literal.
+
+    Escapes the backslash first, then the double quote, so a user-supplied value
+    can never break out of the surrounding ``"..."`` literal in a ``where`` clause.
+    """
+    return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
 async def _fetch_records(
@@ -126,10 +170,12 @@ class PassengerFrequencyInput(BaseModel):
         description="Kantonskürzel (2 Buchstaben), z.B. 'ZH', 'BE', 'AG'",
         min_length=2,
         max_length=2,
+        pattern=CANTON_PATTERN,
     )
     year: str | None = Field(
         default=None,
         description="Jahr (4-stellig), z.B. '2024', '2023'. Ohne Angabe: aktuellste Daten aller Jahre.",
+        pattern=YEAR_PATTERN,
     )
     limit: int = Field(default=20, ge=1, le=100, description="Maximale Anzahl Resultate (1–100)")
     offset: int = Field(default=0, ge=0, description="Offset für Paginierung")
@@ -196,6 +242,7 @@ class TrainsPerSegmentInput(BaseModel):
     year: str | None = Field(
         default=None,
         description="Jahr, z.B. '2025', '2024'",
+        pattern=YEAR_PATTERN,
     )
     traffic_type: str | None = Field(
         default=None,
@@ -245,6 +292,7 @@ class CompareStationsInput(BaseModel):
     year: str | None = Field(
         default=None,
         description="Vergleichsjahr, z.B. '2024'. Ohne Angabe: aktuellste verfügbare Daten.",
+        pattern=YEAR_PATTERN,
     )
 
 
@@ -260,6 +308,7 @@ class StationSearchInput(BaseModel):
         description="Kantonskürzel, z.B. 'ZH', 'BE', 'AG'",
         min_length=2,
         max_length=2,
+        pattern=CANTON_PATTERN,
     )
     limit: int = Field(default=20, ge=1, le=100)
     response_format: ResponseFormat = Field(default=ResponseFormat.MARKDOWN)
@@ -302,7 +351,7 @@ async def sbb_get_passenger_frequency(params: PassengerFrequencyInput) -> str:
     try:
         conditions = []
         if params.station_name:
-            escaped = params.station_name.replace('"', '\\"')
+            escaped = _odsql_quote(params.station_name)
             conditions.append(f'bahnhof_gare_stazione like "%{escaped}%"')
         if params.canton:
             conditions.append(f'kt_ct_cantone="{params.canton.upper()}"')
@@ -467,10 +516,10 @@ async def sbb_get_infrastructure_construction_projects(params: ConstructionProje
     try:
         conditions = []
         if params.city:
-            escaped = params.city.replace('"', '\\"')
+            escaped = _odsql_quote(params.city)
             conditions.append(f'projektort like "%{escaped}%"')
         if params.project_type:
-            escaped = params.project_type.replace('"', '\\"')
+            escaped = _odsql_quote(params.project_type)
             conditions.append(f'art like "%{escaped}%"')
 
         where = " AND ".join(conditions) if conditions else None
@@ -551,10 +600,10 @@ async def sbb_get_real_estate_projects(params: RealEstateProjectsInput) -> str:
     try:
         conditions = []
         if params.city:
-            escaped = params.city.replace('"', '\\"')
+            escaped = _odsql_quote(params.city)
             conditions.append(f'city like "%{escaped}%"')
         if params.phase:
-            conditions.append(f'phase="{params.phase.upper()}"')
+            conditions.append(f'phase="{_odsql_quote(params.phase.upper())}"')
 
         where = " AND ".join(conditions) if conditions else None
         data = await _fetch_records(
@@ -639,14 +688,14 @@ async def sbb_get_trains_per_segment(params: TrainsPerSegmentInput) -> str:
     try:
         conditions = []
         if params.line_name:
-            escaped = params.line_name.replace('"', '\\"')
+            escaped = _odsql_quote(params.line_name)
             conditions.append(f'strecke_bezeichnung like "%{escaped}%"')
         if params.operator:
-            conditions.append(f'isb="{params.operator.upper()}"')
+            conditions.append(f'isb="{_odsql_quote(params.operator.upper())}"')
         if params.year:
             conditions.append(f'jahr="{params.year}"')
         if params.traffic_type:
-            conditions.append(f'geschaeftscode like "%{params.traffic_type}%"')
+            conditions.append(f'geschaeftscode like "%{_odsql_quote(params.traffic_type)}%"')
 
         where = " AND ".join(conditions) if conditions else None
         data = await _fetch_records(
@@ -723,10 +772,10 @@ async def sbb_get_platform_data(params: PlatformDataInput) -> str:
     try:
         conditions = []
         if params.station_name:
-            escaped = params.station_name.replace('"', '\\"')
+            escaped = _odsql_quote(params.station_name)
             conditions.append(f'bps_name like "%{escaped}%"')
         if params.platform_type:
-            escaped = params.platform_type.replace('"', '\\"')
+            escaped = _odsql_quote(params.platform_type)
             conditions.append(f'perrontyp like "%{escaped}%"')
 
         where = " AND ".join(conditions) if conditions else None
@@ -800,7 +849,7 @@ async def sbb_get_rolling_stock(params: RollingStockInput) -> str:
     try:
         conditions = []
         if params.vehicle_type:
-            escaped = params.vehicle_type.replace('"', '\\"')
+            escaped = _odsql_quote(params.vehicle_type)
             conditions.append(f'fahrzeug_typ like "%{escaped}%"')
 
         where = " AND ".join(conditions) if conditions else None
@@ -877,7 +926,7 @@ async def sbb_compare_stations(params: CompareStationsInput) -> str:
 
         # Fetch passenger frequency for all stations
         for station in params.stations:
-            escaped = station.replace('"', '\\"')
+            escaped = _odsql_quote(station)
             where = f'bahnhof_gare_stazione like "%{escaped}%" AND year(jahr_annee_anno)={year_filter}'
             data = await _fetch_records(
                 DATASET_PASSENGER_FREQUENCY, where=where, order_by="dtv_tjm_tgm desc", limit=1
@@ -896,7 +945,7 @@ async def sbb_compare_stations(params: CompareStationsInput) -> str:
 
         # Fetch platform counts for all stations
         for station in params.stations:
-            escaped = station.replace('"', '\\"')
+            escaped = _odsql_quote(station)
             where = f'bps_name like "%{escaped}%"'
             data = await _fetch_records(DATASET_PLATFORMS, where=where, limit=50)
             if data.get("results"):
@@ -957,7 +1006,7 @@ async def sbb_search_stations(params: StationSearchInput) -> str:
              Schema: {name, uic, canton, operator, coordinates}
     """
     try:
-        escaped = params.query.replace('"', '\\"')
+        escaped = _odsql_quote(params.query)
         conditions = [f'bezeichnung_offiziell like "%{escaped}%"']
         if params.canton:
             conditions.append(f'kanton_kuerzel="{params.canton.upper()}"')
@@ -1058,13 +1107,12 @@ async def sbb_list_datasets() -> str:
 if __name__ == "__main__":
     import sys
 
-    transport = "streamable_http" if "--http" in sys.argv else "stdio"
-    port = 8000
+    use_http = "--http" in sys.argv
     for i, arg in enumerate(sys.argv):
         if arg == "--port" and i + 1 < len(sys.argv):
-            port = int(sys.argv[i + 1])
+            mcp.settings.port = int(sys.argv[i + 1])
 
-    if transport == "streamable_http":
-        mcp.run(transport="streamable_http", port=port)
+    if use_http:
+        mcp.run(transport="streamable-http")
     else:
         mcp.run()

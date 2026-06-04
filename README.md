@@ -78,8 +78,20 @@ For remote servers (e.g. [Render.com](https://render.com)):
 git clone https://github.com/malkreide/sbb-opendata-mcp
 cd sbb-opendata-mcp
 pip install -e .
+
+# Bind publicly (behind a rate-limiting reverse proxy) and configure
+# DNS-rebinding / Origin protection for your hostname:
+export MCP_HOST=0.0.0.0
+export MCP_ALLOWED_HOSTS="your-app.onrender.com,your-app.onrender.com:*"
+export MCP_ALLOWED_ORIGINS="https://your-app.onrender.com"
 python -m sbb_opendata_mcp.server --http --port 8000
 ```
+
+**Security note:** the HTTP transport binds to `127.0.0.1` by default and keeps
+DNS-rebinding protection enabled (localhost is allow-listed for local dev). For a
+public deployment set `MCP_HOST`, `MCP_ALLOWED_HOSTS` and `MCP_ALLOWED_ORIGINS` as
+above, and place the server behind a reverse proxy that enforces rate limiting (and
+authentication, if the endpoint should not be public).
 
 ### Local Development
 
