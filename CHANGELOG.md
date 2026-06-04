@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added
+- **F-SDK-01:** Alle Tools liefern jetzt MCP-`structuredContent` (die zugrunde
+  liegenden Datensätze/Metadaten) zusätzlich zum menschenlesbaren Markdown-Text.
+  Additiv und nicht-breaking: der Text-Content bleibt unverändert, programmatische
+  Clients erhalten die Daten ohne erneutes Parsen. Tools geben dazu ein
+  `CallToolResult` mit `structured_output=False` zurück.
+
 ### Fixed
 - **F-SEC-05:** Robuste Zahlenkonvertierung (`_to_number`) verhindert, dass eine
   numerische Zeichenkette aus der API (z.B. `"1200"`) beim `{:,}`-Formatieren der

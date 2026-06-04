@@ -33,7 +33,7 @@ Der Server ist modellunabhängig und funktioniert mit jedem MCP-kompatiblen Clie
 | `sbb_search_stations` | Haltestellen suchen (DiDok-Liste BAV, alle CH) | Laufend |
 | `sbb_list_datasets` | Alle ~89 SBB Open Data Datensätze auflisten | – |
 
-Alle Tools unterstützen `response_format: "markdown"` (für Menschen lesbar) und `"json"` (maschinenlesbar) sowie Paginierung.
+Alle Tools unterstützen `response_format: "markdown"` (für Menschen lesbar) und `"json"` (maschinenlesbar) sowie Paginierung. Zusätzlich liefert jedes Tool MCP-`structuredContent` (die zugrunde liegenden Datensätze/Metadaten) parallel zum lesbaren Text, sodass programmatische Clients die Daten ohne erneutes Parsen verarbeiten können.
 
 ---
 

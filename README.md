@@ -33,7 +33,7 @@ The server is model-agnostic and works with any MCP-compatible client.
 | `sbb_search_stations` | Search stops (Swiss DiDok register, all CH) | Ongoing |
 | `sbb_list_datasets` | List all ~89 SBB open datasets | – |
 
-All tools support `response_format: "markdown"` (human-readable) and `"json"` (machine-readable), plus pagination.
+All tools support `response_format: "markdown"` (human-readable) and `"json"` (machine-readable), plus pagination. Every tool also returns MCP `structuredContent` (the underlying records/metadata) alongside the human-readable text, so programmatic clients can consume the data without re-parsing the rendered output.
 
 ---
 

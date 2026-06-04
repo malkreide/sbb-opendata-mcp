@@ -45,6 +45,12 @@ from sbb_opendata_mcp.server import (
 # Helpers & fixtures
 # ---------------------------------------------------------------------------
 
+
+def _text(r):
+    """Extract the text content from a tool's CallToolResult (str passthrough)."""
+    return r.content[0].text if hasattr(r, "content") else r
+
+
 MOCK_PASSENGER_RECORD = {
     "bahnhof_gare_stazione": "Zürich HB",
     "kt_ct_cantone": "ZH",
@@ -148,7 +154,7 @@ class TestHelperFunctions:
         mock_resp.text = "Not found"
         error = httpx.HTTPStatusError("404", request=AsyncMock(), response=mock_resp)
         result = _handle_api_error(error)
-        assert "nicht gefunden" in result.lower()
+        assert "nicht gefunden" in _text(result).lower()
 
     def test_handle_api_error_429(self):
         mock_resp = AsyncMock()
@@ -156,16 +162,16 @@ class TestHelperFunctions:
         mock_resp.text = "Rate limit"
         error = httpx.HTTPStatusError("429", request=AsyncMock(), response=mock_resp)
         result = _handle_api_error(error)
-        assert "rate-limit" in result.lower() or "limit" in result.lower()
+        assert "rate-limit" in _text(result).lower() or "limit" in _text(result).lower()
 
     def test_handle_api_error_timeout(self):
         error = httpx.TimeoutException("Timeout")
         result = _handle_api_error(error)
-        assert "zeitlimit" in result.lower() or "timeout" in result.lower()
+        assert "zeitlimit" in _text(result).lower() or "timeout" in _text(result).lower()
 
     def test_handle_api_error_generic(self):
         result = _handle_api_error(ValueError("something went wrong"))
-        assert "fehler" in result.lower()
+        assert "fehler" in _text(result).lower()
 
     # --- F-SEC-03: client messages must not leak upstream/internal details ---
 
@@ -175,13 +181,13 @@ class TestHelperFunctions:
         mock_resp.text = "SECRET-STACKTRACE-internal.host:5432"
         error = httpx.HTTPStatusError("500", request=AsyncMock(), response=mock_resp)
         result = _handle_api_error(error)
-        assert "SECRET-STACKTRACE" not in result
-        assert "500" in result  # the status code itself is fine to surface
+        assert "SECRET-STACKTRACE" not in _text(result)
+        assert "500" in _text(result)  # the status code itself is fine to surface
 
     def test_generic_error_does_not_leak_exception_string(self):
         result = _handle_api_error(ValueError("super-secret-internal-detail"))
-        assert "super-secret-internal-detail" not in result
-        assert "ValueError" not in result
+        assert "super-secret-internal-detail" not in _text(result)
+        assert "ValueError" not in _text(result)
 
 
 # ---------------------------------------------------------------------------
@@ -430,7 +436,7 @@ class TestSharedClient:
             result = await sbb_compare_stations(
                 CompareStationsInput(stations=["Zürich HB", "Bern", "Basel SBB"], year="2024")
             )
-        assert "Zürich HB" in result or "Bern" in result
+        assert "Zürich HB" in _text(result) or "Bern" in _text(result)
         # 3 stations running concurrently → peak well above 1.
         assert peak >= 3
 
@@ -451,8 +457,8 @@ class TestPassengerFrequencyTool:
             result = await sbb_get_passenger_frequency(
                 PassengerFrequencyInput(station_name="Zürich HB", year="2024")
             )
-        assert "Zürich HB" in result
-        assert "410" in result or "DTV" in result or "Passagier" in result
+        assert "Zürich HB" in _text(result)
+        assert "410" in _text(result) or "DTV" in _text(result) or "Passagier" in _text(result)
 
     @pytest.mark.asyncio
     async def test_json_output(self):
@@ -464,7 +470,7 @@ class TestPassengerFrequencyTool:
             result = await sbb_get_passenger_frequency(
                 PassengerFrequencyInput(station_name="Zürich HB", response_format="json")
             )
-        parsed = json.loads(result)
+        parsed = json.loads(_text(result))
         assert "results" in parsed
         assert "pagination" in parsed
         assert parsed["results"][0]["bahnhof_gare_stazione"] == "Zürich HB"
@@ -479,7 +485,11 @@ class TestPassengerFrequencyTool:
             result = await sbb_get_passenger_frequency(
                 PassengerFrequencyInput(station_name="NichtExistierendXYZ")
             )
-        assert "keine" in result.lower() or "not found" in result.lower() or "gefunden" in result.lower()
+        assert (
+            "keine" in _text(result).lower()
+            or "not found" in _text(result).lower()
+            or "gefunden" in _text(result).lower()
+        )
 
     @pytest.mark.asyncio
     async def test_pagination_info_shown(self):
@@ -489,7 +499,7 @@ class TestPassengerFrequencyTool:
             return_value=mock_api_response([MOCK_PASSENGER_RECORD] * 5, total=100),
         ):
             result = await sbb_get_passenger_frequency(PassengerFrequencyInput(limit=5))
-        assert "100" in result or "weitere" in result.lower()
+        assert "100" in _text(result) or "weitere" in _text(result).lower()
 
 
 class TestRailDisruptionsTool:
@@ -501,7 +511,7 @@ class TestRailDisruptionsTool:
             return_value=mock_api_response([MOCK_DISRUPTION_RECORD]),
         ):
             result = await sbb_get_rail_disruptions(RailDisruptionsInput())
-        assert "Unterbruch" in result or "Zürich" in result
+        assert "Unterbruch" in _text(result) or "Zürich" in _text(result)
 
     @pytest.mark.asyncio
     async def test_json_output(self):
@@ -511,7 +521,7 @@ class TestRailDisruptionsTool:
             return_value=mock_api_response([MOCK_DISRUPTION_RECORD]),
         ):
             result = await sbb_get_rail_disruptions(RailDisruptionsInput(response_format="json"))
-        parsed = json.loads(result)
+        parsed = json.loads(_text(result))
         assert "results" in parsed
 
     @pytest.mark.asyncio
@@ -522,7 +532,7 @@ class TestRailDisruptionsTool:
             return_value=mock_api_response([]),
         ):
             result = await sbb_get_rail_disruptions(RailDisruptionsInput())
-        assert "keine" in result.lower()
+        assert "keine" in _text(result).lower()
 
 
 class TestConstructionProjectsTool:
@@ -536,7 +546,7 @@ class TestConstructionProjectsTool:
             result = await sbb_get_infrastructure_construction_projects(
                 ConstructionProjectsInput(city="Zürich")
             )
-        assert "Zürich" in result or "Bahnzugang" in result
+        assert "Zürich" in _text(result) or "Bahnzugang" in _text(result)
 
     @pytest.mark.asyncio
     async def test_json_output(self):
@@ -548,7 +558,7 @@ class TestConstructionProjectsTool:
             result = await sbb_get_infrastructure_construction_projects(
                 ConstructionProjectsInput(response_format="json")
             )
-        parsed = json.loads(result)
+        parsed = json.loads(_text(result))
         assert "results" in parsed
 
 
@@ -561,8 +571,8 @@ class TestPlatformDataTool:
             return_value=mock_api_response([MOCK_PLATFORM_RECORD]),
         ):
             result = await sbb_get_platform_data(PlatformDataInput(station_name="Zürich HB"))
-        assert "Zürich HB" in result
-        assert "420" in result or "Mittelperron" in result
+        assert "Zürich HB" in _text(result)
+        assert "420" in _text(result) or "Mittelperron" in _text(result)
 
     @pytest.mark.asyncio
     async def test_json_output(self):
@@ -572,7 +582,7 @@ class TestPlatformDataTool:
             return_value=mock_api_response([MOCK_PLATFORM_RECORD]),
         ):
             result = await sbb_get_platform_data(PlatformDataInput(response_format="json"))
-        parsed = json.loads(result)
+        parsed = json.loads(_text(result))
         assert "results" in parsed
 
 
@@ -585,7 +595,7 @@ class TestRollingStockTool:
             return_value=mock_api_response([MOCK_ROLLING_STOCK_RECORD]),
         ):
             result = await sbb_get_rolling_stock(RollingStockInput(vehicle_type="IC 2000"))
-        assert "IC 2000" in result
+        assert "IC 2000" in _text(result)
 
     @pytest.mark.asyncio
     async def test_seat_capacity_shown(self):
@@ -595,7 +605,7 @@ class TestRollingStockTool:
             return_value=mock_api_response([MOCK_ROLLING_STOCK_RECORD]),
         ):
             result = await sbb_get_rolling_stock(RollingStockInput())
-        assert "600" in result or "480" in result or "120" in result
+        assert "600" in _text(result) or "480" in _text(result) or "120" in _text(result)
 
 
 class TestTrainsPerSegmentTool:
@@ -607,7 +617,7 @@ class TestTrainsPerSegmentTool:
             return_value=mock_api_response([MOCK_TRAIN_SEGMENT_RECORD]),
         ):
             result = await sbb_get_trains_per_segment(TrainsPerSegmentInput(operator="SBB", year="2025"))
-        assert "SBB" in result or "Zürich" in result or "245" in result
+        assert "SBB" in _text(result) or "Zürich" in _text(result) or "245" in _text(result)
 
     @pytest.mark.asyncio
     async def test_json_output(self):
@@ -617,7 +627,7 @@ class TestTrainsPerSegmentTool:
             return_value=mock_api_response([MOCK_TRAIN_SEGMENT_RECORD]),
         ):
             result = await sbb_get_trains_per_segment(TrainsPerSegmentInput(response_format="json"))
-        parsed = json.loads(result)
+        parsed = json.loads(_text(result))
         assert "results" in parsed
 
 
@@ -640,8 +650,8 @@ class TestCompareStationsTool:
             result = await sbb_compare_stations(
                 CompareStationsInput(stations=["Zürich HB", "Bern"], year="2024")
             )
-        assert "Zürich HB" in result or "Bern" in result
-        assert "2024" in result
+        assert "Zürich HB" in _text(result) or "Bern" in _text(result)
+        assert "2024" in _text(result)
 
 
 class TestStationSearchTool:
@@ -658,8 +668,8 @@ class TestStationSearchTool:
             return_value=mock_api_response([mock_station]),
         ):
             result = await sbb_search_stations(StationSearchInput(query="Wädenswil"))
-        assert "Wädenswil" in result
-        assert "ZH" in result
+        assert "Wädenswil" in _text(result)
+        assert "ZH" in _text(result)
 
     @pytest.mark.asyncio
     async def test_no_results(self):
@@ -669,7 +679,7 @@ class TestStationSearchTool:
             return_value=mock_api_response([]),
         ):
             result = await sbb_search_stations(StationSearchInput(query="XYZNOTEXIST"))
-        assert "keine" in result.lower() or "not found" in result.lower()
+        assert "keine" in _text(result).lower() or "not found" in _text(result).lower()
 
 
 class TestToNumber:
@@ -702,8 +712,8 @@ class TestRealEstateTool:
             return_value=mock_api_response([record]),
         ):
             result = await sbb_get_real_estate_projects(RealEstateProjectsInput(city="Zürich"))
-        assert "Fehler" not in result
-        assert "1'200" in result  # formatted with thousands separator
+        assert "Fehler" not in _text(result)
+        assert "1'200" in _text(result)  # formatted with thousands separator
 
 
 class TestCompareStationsFormat:
@@ -720,9 +730,53 @@ class TestCompareStationsFormat:
             result = await sbb_compare_stations(
                 CompareStationsInput(stations=["Zürich HB", "Bern"], year="2024", response_format="json")
             )
-        parsed = json.loads(result)
+        parsed = json.loads(_text(result))
         assert parsed["year"] == "2024"
         assert len(parsed["stations"]) == 2
+
+
+class TestStructuredOutput:
+    """F-SDK-01: tools return structuredContent alongside human-readable text."""
+
+    @pytest.mark.asyncio
+    async def test_markdown_mode_still_includes_structured_content(self):
+        from mcp.types import CallToolResult
+
+        with patch(
+            "sbb_opendata_mcp.server._fetch_records",
+            new_callable=AsyncMock,
+            return_value=mock_api_response([MOCK_PASSENGER_RECORD]),
+        ):
+            result = await sbb_get_passenger_frequency(
+                PassengerFrequencyInput(station_name="Zürich HB", year="2024")
+            )
+        # Human-readable markdown is preserved (non-breaking) ...
+        assert isinstance(result, CallToolResult)
+        assert "## SBB Passagierfrequenz" in result.content[0].text
+        # ... and the underlying records are exposed as structured content.
+        assert result.structuredContent["results"][0]["bahnhof_gare_stazione"] == "Zürich HB"
+        assert "pagination" in result.structuredContent
+
+    @pytest.mark.asyncio
+    async def test_empty_result_still_structured(self):
+        with patch(
+            "sbb_opendata_mcp.server._fetch_records",
+            new_callable=AsyncMock,
+            return_value=mock_api_response([]),
+        ):
+            result = await sbb_get_platform_data(PlatformDataInput(station_name="XYZ"))
+        assert result.structuredContent["results"] == []
+
+    @pytest.mark.asyncio
+    async def test_error_result_flagged_in_structured_content(self):
+        with patch(
+            "sbb_opendata_mcp.server._fetch_records",
+            new_callable=AsyncMock,
+            side_effect=ValueError("boom"),
+        ):
+            result = await sbb_get_rolling_stock(RollingStockInput())
+        assert "error" in result.structuredContent
+        assert "Fehler" in result.content[0].text
 
 
 # ---------------------------------------------------------------------------
@@ -734,12 +788,10 @@ class TestCompareStationsFormat:
 @pytest.mark.live
 async def test_live_zurich_hb_frequency():
     """Live-Test: Passagierfrequenz Zürich HB 2024."""
-    result = await sbb_get_passenger_frequency(
-        PassengerFrequencyInput(station_name="Zürich HB", year="2024")
-    )
-    assert "Zürich HB" in result
-    assert "2024" in result
-    assert "410" in result  # ca. 410'000 DTV
+    result = await sbb_get_passenger_frequency(PassengerFrequencyInput(station_name="Zürich HB", year="2024"))
+    assert "Zürich HB" in _text(result)
+    assert "2024" in _text(result)
+    assert "410" in _text(result)  # ca. 410'000 DTV
 
 
 @pytest.mark.asyncio
@@ -747,8 +799,8 @@ async def test_live_zurich_hb_frequency():
 async def test_live_rail_disruptions():
     """Live-Test: Aktuelle Bahnverkehrsmeldungen."""
     result = await sbb_get_rail_disruptions(RailDisruptionsInput(limit=5))
-    assert isinstance(result, str)
-    assert len(result) > 50
+    assert isinstance(_text(result), str)
+    assert len(_text(result)) > 50
 
 
 @pytest.mark.asyncio
@@ -756,18 +808,16 @@ async def test_live_rail_disruptions():
 async def test_live_list_datasets():
     """Live-Test: Alle Datensätze auflisten."""
     result = await sbb_list_datasets()
-    assert "passagierfrequenz" in result.lower()
-    assert "SBB" in result
+    assert "passagierfrequenz" in _text(result).lower()
+    assert "SBB" in _text(result)
 
 
 @pytest.mark.asyncio
 @pytest.mark.live
 async def test_live_compare_zurich_bern():
     """Live-Test: Vergleich Zürich HB vs. Bern."""
-    result = await sbb_compare_stations(
-        CompareStationsInput(stations=["Zürich HB", "Bern"], year="2024")
-    )
-    assert "Zürich HB" in result or "Bern" in result
+    result = await sbb_compare_stations(CompareStationsInput(stations=["Zürich HB", "Bern"], year="2024"))
+    assert "Zürich HB" in _text(result) or "Bern" in _text(result)
 
 
 @pytest.mark.asyncio
@@ -775,4 +825,4 @@ async def test_live_compare_zurich_bern():
 async def test_live_search_waedenswil():
     """Live-Test: Haltestellensuche Wädenswil."""
     result = await sbb_search_stations(StationSearchInput(query="Wädenswil", canton="ZH"))
-    assert "Wädenswil" in result
+    assert "Wädenswil" in _text(result)
