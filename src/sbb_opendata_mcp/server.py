@@ -234,22 +234,23 @@ async def _fetch_records(
 def _handle_api_error(e: Exception) -> str:
     """Consistent, actionable error messages for all tools.
 
-    Every caught exception is logged here (to stderr) so failures are
-    observable, while the client only receives a sanitized message.
+    Detailed diagnostics (upstream response body, exception string and traceback)
+    go to the server log on stderr; the client only receives a sanitized message
+    that never echoes upstream or internal details back.
     """
     if isinstance(e, httpx.HTTPStatusError):
         status = e.response.status_code
-        _log(logging.WARNING, "upstream_http_error", status=status)
+        _log(logging.WARNING, "upstream_http_error", status=status, body=e.response.text[:500])
         if status == 404:
             return "Fehler: Datensatz oder Ressource nicht gefunden. Bitte Dataset-ID und Parameter prüfen."
         if status == 429:
             return "Fehler: Rate-Limit erreicht. Bitte kurz warten und erneut versuchen."
-        return f"Fehler: API-Anfrage fehlgeschlagen (HTTP {status}). Details: {e.response.text[:200]}"
+        return f"Fehler: API-Anfrage fehlgeschlagen (HTTP {status}). Bitte später erneut versuchen."
     if isinstance(e, httpx.TimeoutException):
         _log(logging.WARNING, "upstream_timeout", timeout_s=DEFAULT_TIMEOUT)
         return "Fehler: Anfrage hat Zeitlimit überschritten (30s). Bitte erneut versuchen."
     logger.error("unexpected_error", exc_info=e, extra={"fields": {"error_type": type(e).__name__}})
-    return f"Fehler: Unerwarteter Fehler ({type(e).__name__}): {str(e)[:200]}"
+    return "Fehler: Unerwarteter interner Fehler. Details wurden serverseitig protokolliert."
 
 
 def _pagination_meta(total: int, limit: int, offset: int) -> dict[str, Any]:

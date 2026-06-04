@@ -164,6 +164,22 @@ class TestHelperFunctions:
         result = _handle_api_error(ValueError("something went wrong"))
         assert "fehler" in result.lower()
 
+    # --- F-SEC-03: client messages must not leak upstream/internal details ---
+
+    def test_http_error_does_not_leak_upstream_body(self):
+        mock_resp = AsyncMock()
+        mock_resp.status_code = 500
+        mock_resp.text = "SECRET-STACKTRACE-internal.host:5432"
+        error = httpx.HTTPStatusError("500", request=AsyncMock(), response=mock_resp)
+        result = _handle_api_error(error)
+        assert "SECRET-STACKTRACE" not in result
+        assert "500" in result  # the status code itself is fine to surface
+
+    def test_generic_error_does_not_leak_exception_string(self):
+        result = _handle_api_error(ValueError("super-secret-internal-detail"))
+        assert "super-secret-internal-detail" not in result
+        assert "ValueError" not in result
+
 
 # ---------------------------------------------------------------------------
 # Unit Tests: Input models

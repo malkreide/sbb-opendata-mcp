@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Security
+- **F-SEC-03:** Fehlermeldungen an den Client geben keine Upstream-Response-Bodies
+  oder internen Exception-Strings mehr preis. Details (Body, Exception, Traceback)
+  werden serverseitig protokolliert; der Client erhält nur eine bereinigte Meldung.
+- **F-SEC-04:** Abhängigkeiten mit Major-Obergrenzen versehen (`mcp[cli]>=1.6.0,<2`,
+  `httpx>=0.27.0,<1`, `pydantic>=2.0.0,<3`) und reproduzierbaren `uv.lock` committet.
+
 ### Performance
 - **F-SCALE-01:** Ein gemeinsamer, langlebiger `httpx.AsyncClient` (Connection-Pooling
   mit Keep-Alive) ersetzt das bisherige Anlegen eines neuen Clients pro Request; der
