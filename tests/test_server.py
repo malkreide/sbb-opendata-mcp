@@ -21,17 +21,20 @@ from sbb_opendata_mcp.server import (
     PassengerFrequencyInput,
     PlatformDataInput,
     RailDisruptionsInput,
+    RealEstateProjectsInput,
     ResponseFormat,
     RollingStockInput,
     StationSearchInput,
     TrainsPerSegmentInput,
     _handle_api_error,
     _pagination_meta,
+    _to_number,
     sbb_compare_stations,
     sbb_get_infrastructure_construction_projects,
     sbb_get_passenger_frequency,
     sbb_get_platform_data,
     sbb_get_rail_disruptions,
+    sbb_get_real_estate_projects,
     sbb_get_rolling_stock,
     sbb_get_trains_per_segment,
     sbb_list_datasets,
@@ -667,6 +670,59 @@ class TestStationSearchTool:
         ):
             result = await sbb_search_stations(StationSearchInput(query="XYZNOTEXIST"))
         assert "keine" in result.lower() or "not found" in result.lower()
+
+
+class TestToNumber:
+    """F-SEC-05: robust numeric coercion."""
+
+    def test_numbers_and_numeric_strings(self):
+        assert _to_number(1200) == 1200.0
+        assert _to_number(1200.5) == 1200.5
+        assert _to_number("1200") == 1200.0
+
+    def test_non_numeric_returns_none(self):
+        for bad in (None, "–", "n/a", "", True, False):
+            assert _to_number(bad) is None
+
+
+class TestRealEstateTool:
+    """F-SEC-05: a numeric-string area must not trigger a formatting error."""
+
+    @pytest.mark.asyncio
+    async def test_area_as_string_does_not_error(self):
+        record = {
+            "titlede": "Wohnüberbauung Test",
+            "city": "Zürich",
+            "phase": "CONSTRUCTION",
+            "mainusefulareastotal": "1200",  # string from API used to crash {:,}
+        }
+        with patch(
+            "sbb_opendata_mcp.server._fetch_records",
+            new_callable=AsyncMock,
+            return_value=mock_api_response([record]),
+        ):
+            result = await sbb_get_real_estate_projects(RealEstateProjectsInput(city="Zürich"))
+        assert "Fehler" not in result
+        assert "1'200" in result  # formatted with thousands separator
+
+
+class TestCompareStationsFormat:
+    """F-ARCH-01: compare_stations supports response_format like other tools."""
+
+    @pytest.mark.asyncio
+    async def test_json_output(self):
+        async def mock_fetch(dataset_id, **kwargs):
+            if "passagier" in dataset_id:
+                return mock_api_response([MOCK_PASSENGER_RECORD])
+            return mock_api_response([MOCK_PLATFORM_RECORD])
+
+        with patch("sbb_opendata_mcp.server._fetch_records", side_effect=mock_fetch):
+            result = await sbb_compare_stations(
+                CompareStationsInput(stations=["Zürich HB", "Bern"], year="2024", response_format="json")
+            )
+        parsed = json.loads(result)
+        assert parsed["year"] == "2024"
+        assert len(parsed["stations"]) == 2
 
 
 # ---------------------------------------------------------------------------

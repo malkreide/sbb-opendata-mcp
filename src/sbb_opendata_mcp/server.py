@@ -253,6 +253,22 @@ def _handle_api_error(e: Exception) -> str:
     return "Fehler: Unerwarteter interner Fehler. Details wurden serverseitig protokolliert."
 
 
+def _to_number(value: Any) -> float | None:
+    """Best-effort numeric coercion; returns None for missing/non-numeric values.
+
+    Guards against ``ValueError`` when a numeric-looking string (e.g. ``"1200"``)
+    is passed to a ``,``-format spec.
+    """
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _pagination_meta(total: int, limit: int, offset: int) -> dict[str, Any]:
     """Reusable pagination metadata block."""
     returned = min(limit, max(0, total - offset))
@@ -410,6 +426,10 @@ class CompareStationsInput(BaseModel):
         default=None,
         description="Vergleichsjahr, z.B. '2024'. Ohne Angabe: aktuellste verfügbare Daten.",
         pattern=YEAR_PATTERN,
+    )
+    response_format: ResponseFormat = Field(
+        default=ResponseFormat.MARKDOWN,
+        description="Ausgabeformat: 'markdown' (lesbar) oder 'json' (maschinenlesbar)",
     )
 
 
@@ -749,7 +769,7 @@ async def sbb_get_real_estate_projects(params: RealEstateProjectsInput) -> str:
             phase = r.get("phase", "–")
             start = r.get("startofconstruction", "–")
             move_in = r.get("moveinto", "–")
-            area = r.get("mainusefulareastotal", "–")
+            area = _to_number(r.get("mainusefulareastotal"))
             lead = r.get("leadde") or r.get("leaden", "")
 
             phase_emoji = {"CONSTRUCTION": "🔨", "PLANNING": "📐", "COMPLETED": "✅"}.get(phase, "🏢")
@@ -757,8 +777,8 @@ async def sbb_get_real_estate_projects(params: RealEstateProjectsInput) -> str:
             lines.append(f"### {phase_emoji} {title} ({city})")
             lines.append(f"- **Phase:** {phase}")
             lines.append(f"- **Baustart:** {start}  |  **Einzug:** {move_in}")
-            if area and area != "–":
-                lines.append(f"- **Nutzfläche:** {area:,} m²".replace(",", "'"))
+            if area is not None:
+                lines.append(f"- **Nutzfläche:** {area:,.0f} m²".replace(",", "'"))
             if lead:
                 lines.append(f"- **Beschreibung:** {lead[:200]}...")
             lines.append("")
@@ -1079,6 +1099,13 @@ async def sbb_compare_stations(params: CompareStationsInput) -> str:
         # Fan out across stations concurrently (was 2×N sequential requests).
         for station, info in await asyncio.gather(*(_collect(s) for s in params.stations)):
             results_by_station[station].update(info)
+
+        if params.response_format == ResponseFormat.JSON:
+            return json.dumps(
+                {"year": year_filter, "stations": list(results_by_station.values())},
+                ensure_ascii=False,
+                indent=2,
+            )
 
         lines = [f"## Bahnhofvergleich ({year_filter})\n"]
         lines.append("| Bahnhof | Kanton | DTV (tägl.) | DWV (werktags) | Perrons | Gesamtlänge (m) |")

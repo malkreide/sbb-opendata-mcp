@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Fixed
+- **F-SEC-05:** Robuste Zahlenkonvertierung (`_to_number`) verhindert, dass eine
+  numerische Zeichenkette aus der API (z.B. `"1200"`) beim `{:,}`-Formatieren der
+  Nutzfläche einen `ValueError` auslöst und einen gültigen Datensatz als „Fehler"
+  erscheinen lässt.
+
+### Changed
+- **F-ARCH-01:** `sbb_compare_stations` unterstützt jetzt `response_format`
+  (`markdown`/`json`) wie die übrigen Tools.
+- **F-OPS-01:** `[project.optional-dependencies] dev` ergänzt, sodass
+  `pip install -e ".[dev]"` (wie im README) funktioniert; pytest-Marker `live`
+  in `pyproject.toml` registriert (keine `PytestUnknownMarkWarning` mehr).
+  `uv.lock` entsprechend aktualisiert.
+
 ### Security
 - **F-SEC-03:** Fehlermeldungen an den Client geben keine Upstream-Response-Bodies
   oder internen Exception-Strings mehr preis. Details (Body, Exception, Traceback)
