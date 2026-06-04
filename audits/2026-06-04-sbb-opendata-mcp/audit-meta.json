@@ -1,0 +1,40 @@
+{
+  "run_id": "2026-06-04T00:00:00+02:00-sbb-opendata-mcp",
+  "server": "sbb-opendata-mcp",
+  "server_version": "0.1.0",
+  "repo": "malkreide/sbb-opendata-mcp",
+  "branch": "claude/quirky-mccarthy-dWbLq",
+  "auditor": "Claude Code (claude-opus-4-8)",
+  "skill": {
+    "source": "github.com/malkreide/mcp-audit-skill",
+    "ref": "main",
+    "catalog_checks": 68,
+    "catalog_hash": "not-pinned (remote main read at audit time)"
+  },
+  "profile": {
+    "transport": ["stdio", "streamable_http"],
+    "auth_model": "none",
+    "write_capable": false,
+    "data_class": "public",
+    "handles_pii": false,
+    "is_cloud_deployed": true,
+    "backend": "OpenDataSoft REST v2.1 (data.sbb.ch)"
+  },
+  "applicability": {
+    "ARCH": {"total": 12, "applicable": 12},
+    "SDK": {"total": 5, "applicable": 5},
+    "SEC": {"total": 23, "applicable": 12, "na_reason": "OAuth/PKCE/Confused-Deputy/Resource-Indicators/token validation not applicable (no auth)"},
+    "SCALE": {"total": 6, "applicable": 6},
+    "OBS": {"total": 6, "applicable": 6},
+    "HITL": {"total": 5, "applicable": 0, "na_reason": "no sampling / human-in-the-loop; read-only"},
+    "CH": {"total": 8, "applicable": 2, "na_reason": "no personal data; only licensing/attribution relevant"},
+    "OPS": {"total": 3, "applicable": 3}
+  },
+  "evidence_gathered": {
+    "ruff_check": "All checks passed!",
+    "pytest_not_live": "34 passed, 5 deselected",
+    "python": "3.11.15"
+  },
+  "findings_policy": "fail-or-partial",
+  "counts": {"total": 10, "critical": 0, "high": 2, "medium": 4, "low": 4}
+}
