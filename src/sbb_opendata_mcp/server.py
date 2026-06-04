@@ -5,7 +5,10 @@ No API key required. Data from data.sbb.ch.
 """
 
 import json
+import logging
 import os
+import sys
+import time
 from enum import StrEnum
 from typing import Any
 
@@ -32,6 +35,60 @@ CANTON_PATTERN = r"^[A-Za-z]{2}$"
 # for a public deployment set MCP_ALLOWED_HOSTS / MCP_ALLOWED_ORIGINS and
 # bind via MCP_HOST (e.g. 0.0.0.0 behind a rate-limiting reverse proxy).
 DEFAULT_ALLOWED_HOSTS = ["127.0.0.1", "127.0.0.1:*", "localhost", "localhost:*"]
+
+# ---------------------------------------------------------------------------
+# Logging / observability
+# ---------------------------------------------------------------------------
+
+logger = logging.getLogger("sbb_opendata_mcp")
+
+
+class _JsonFormatter(logging.Formatter):
+    """Minimal structured JSON formatter (one line per record)."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        payload: dict[str, Any] = {
+            "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S%z"),
+            "level": record.levelname,
+            "logger": record.name,
+            "msg": record.getMessage(),
+        }
+        payload.update(getattr(record, "fields", {}))
+        if record.exc_info:
+            payload["exc"] = self.formatException(record.exc_info)
+        return json.dumps(payload, ensure_ascii=False)
+
+
+def configure_logging() -> None:
+    """Attach a single stderr handler to the package logger.
+
+    Logs MUST go to stderr: the stdio transport uses stdout for the JSON-RPC
+    channel, so any stdout write would corrupt the protocol. Idempotent —
+    safe to call from module import and from the entry point.
+
+    Controlled by env vars: ``LOG_LEVEL`` (default INFO) and ``LOG_FORMAT``
+    (``text`` default, or ``json`` for structured output).
+    """
+    if logger.handlers:
+        return
+    handler = logging.StreamHandler(sys.stderr)
+    if os.environ.get("LOG_FORMAT", "text").lower() == "json":
+        handler.setFormatter(_JsonFormatter())
+    else:
+        handler.setFormatter(
+            logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s")
+        )
+    logger.addHandler(handler)
+    logger.setLevel(os.environ.get("LOG_LEVEL", "INFO").upper())
+    logger.propagate = False
+
+
+def _log(level: int, msg: str, **fields: Any) -> None:
+    """Emit a log record with structured ``fields`` (rendered in JSON mode)."""
+    logger.log(level, msg, extra={"fields": fields})
+
+
+configure_logging()
 
 # Dataset IDs
 DATASET_PASSENGER_FREQUENCY = "passagierfrequenz"
@@ -116,23 +173,42 @@ async def _fetch_records(
     if select:
         params["select"] = select
 
+    _log(logging.DEBUG, "upstream_request", dataset=dataset_id, limit=params["limit"], offset=offset)
+    started = time.monotonic()
     async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as client:
         response = client.build_request("GET", url, params=params)
         r = await client.send(response)
         r.raise_for_status()
-        return r.json()
+        data = r.json()
+    _log(
+        logging.INFO,
+        "upstream_response",
+        dataset=dataset_id,
+        status=r.status_code,
+        total_count=data.get("total_count"),
+        duration_ms=round((time.monotonic() - started) * 1000),
+    )
+    return data
 
 
 def _handle_api_error(e: Exception) -> str:
-    """Consistent, actionable error messages for all tools."""
+    """Consistent, actionable error messages for all tools.
+
+    Every caught exception is logged here (to stderr) so failures are
+    observable, while the client only receives a sanitized message.
+    """
     if isinstance(e, httpx.HTTPStatusError):
-        if e.response.status_code == 404:
+        status = e.response.status_code
+        _log(logging.WARNING, "upstream_http_error", status=status)
+        if status == 404:
             return "Fehler: Datensatz oder Ressource nicht gefunden. Bitte Dataset-ID und Parameter prüfen."
-        if e.response.status_code == 429:
+        if status == 429:
             return "Fehler: Rate-Limit erreicht. Bitte kurz warten und erneut versuchen."
-        return f"Fehler: API-Anfrage fehlgeschlagen (HTTP {e.response.status_code}). Details: {e.response.text[:200]}"
+        return f"Fehler: API-Anfrage fehlgeschlagen (HTTP {status}). Details: {e.response.text[:200]}"
     if isinstance(e, httpx.TimeoutException):
+        _log(logging.WARNING, "upstream_timeout", timeout_s=DEFAULT_TIMEOUT)
         return "Fehler: Anfrage hat Zeitlimit überschritten (30s). Bitte erneut versuchen."
+    logger.error("unexpected_error", exc_info=e, extra={"fields": {"error_type": type(e).__name__}})
     return f"Fehler: Unerwarteter Fehler ({type(e).__name__}): {str(e)[:200]}"
 
 
@@ -1105,14 +1181,15 @@ async def sbb_list_datasets() -> str:
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    import sys
-
     use_http = "--http" in sys.argv
     for i, arg in enumerate(sys.argv):
         if arg == "--port" and i + 1 < len(sys.argv):
             mcp.settings.port = int(sys.argv[i + 1])
 
     if use_http:
+        _log(logging.INFO, "server_start", transport="streamable-http",
+             host=mcp.settings.host, port=mcp.settings.port)
         mcp.run(transport="streamable-http")
     else:
+        _log(logging.INFO, "server_start", transport="stdio")
         mcp.run()

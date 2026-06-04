@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Observability
+- **F-OBS-01:** Strukturiertes Logging ergänzt. Package-Logger `sbb_opendata_mcp`
+  mit Handler auf **stderr** (stdout bleibt dem stdio-JSON-RPC-Kanal vorbehalten).
+  Konfigurierbar über `LOG_LEVEL` (Default INFO) und `LOG_FORMAT` (`text`/`json`).
+  Upstream-Requests/-Responses werden mit Dataset, Statuscode und Dauer geloggt;
+  jede in `_handle_api_error` gefangene Exception wird protokolliert (Client erhält
+  weiterhin nur eine bereinigte Meldung). Startup-Event mit Transport/Host/Port.
+
 ### Security
 - **F-SEC-01:** ODSQL-Injection gehärtet. `year`-/`canton`-Parameter werden jetzt per
   Regex (`^\d{4}$` / `^[A-Za-z]{2}$`) validiert, und alle in die `where`-Klausel
