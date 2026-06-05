@@ -1,6 +1,10 @@
 # Changelog
 
-## [Unreleased]
+## [0.2.0] — 2026-06-05
+
+Vollständige Remediation des MCP-Audits ([mcp-audit-skill](https://github.com/malkreide/mcp-audit-skill)):
+alle 10 Findings (2 High · 4 Medium · 4 Low) behoben, über die PRs #2–#7. Testsuite
+von 34 auf 60 Tests gewachsen, `ruff` sauber, reproduzierbarer `uv.lock`.
 
 ### Added
 - **F-SDK-01:** Alle Tools liefern jetzt MCP-`structuredContent` (die zugrunde
@@ -23,7 +27,7 @@
   in `pyproject.toml` registriert (keine `PytestUnknownMarkWarning` mehr).
   `uv.lock` entsprechend aktualisiert.
 
-### Security
+### Security (Error handling & dependencies)
 - **F-SEC-03:** Fehlermeldungen an den Client geben keine Upstream-Response-Bodies
   oder internen Exception-Strings mehr preis. Details (Body, Exception, Traceback)
   werden serverseitig protokolliert; der Client erhält nur eine bereinigte Meldung.
@@ -45,7 +49,7 @@
   jede in `_handle_api_error` gefangene Exception wird protokolliert (Client erhält
   weiterhin nur eine bereinigte Meldung). Startup-Event mit Transport/Host/Port.
 
-### Security
+### Security (Transport & Injection)
 - **F-SEC-01:** ODSQL-Injection gehärtet. `year`-/`canton`-Parameter werden jetzt per
   Regex (`^\d{4}$` / `^[A-Za-z]{2}$`) validiert, und alle in die `where`-Klausel
   interpolierten String-Werte (inkl. zuvor ungeescapter `operator`, `phase`,

@@ -36,5 +36,12 @@
     "python": "3.11.15"
   },
   "findings_policy": "fail-or-partial",
-  "counts": {"total": 10, "critical": 0, "high": 2, "medium": 4, "low": 4}
+  "counts": {"total": 10, "critical": 0, "high": 2, "medium": 4, "low": 4},
+  "remediation": {
+    "completed": "2026-06-05",
+    "closed": 10,
+    "open": 0,
+    "pull_requests": [2, 3, 4, 5, 6, 7],
+    "verification": {"pytest_not_live": "60 passed", "ruff_check": "All checks passed!"}
+  }
 }

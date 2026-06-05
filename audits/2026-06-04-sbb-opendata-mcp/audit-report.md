@@ -5,7 +5,8 @@
 **Skill:** [malkreide/mcp-audit-skill](https://github.com/malkreide/mcp-audit-skill) (`main`)
 **Repository:** [malkreide/sbb-opendata-mcp](https://github.com/malkreide/sbb-opendata-mcp)
 **Commit/Branch:** `claude/quirky-mccarthy-dWbLq`
-**Server-Version:** 0.1.0
+**Server-Version:** 0.1.0 (auditiert) → 0.2.0 (remediiert)
+**Remediation-Status:** ✅ **10 / 10 Findings closed** (2026-06-05, PRs #2–#7)
 
 ---
 
@@ -23,11 +24,15 @@ betreffen ausschliesslich das **Streamable-HTTP-/Cloud-Deployment**: (1) ODSQL-Q
 über unvalidierte Filterparameter und (2) ein HTTP-Transport ohne Authentifizierung,
 Origin-Validierung oder Rate-Limiting.
 
-**Produktionsreife-Einschätzung:**
-- ✅ **stdio (Claude Desktop, lokal):** produktionsreif — die High-Findings haben hier
-  geringe Tragweite (vertrauenswürdiger lokaler Client, kein Netzwerk-Exposure).
-- ⚠️ **Streamable HTTP (Cloud / Render.com):** **bedingt** — F-SEC-01 und F-SEC-02 sollten
-  vor einem öffentlichen Deployment behoben werden.
+**Produktionsreife-Einschätzung (nach Remediation):**
+- ✅ **stdio (Claude Desktop, lokal):** produktionsreif.
+- ✅ **Streamable HTTP (Cloud / Render.com):** produktionsreif — F-SEC-01 und F-SEC-02
+  sind behoben; der HTTP-Transport ist mit DNS-Rebinding-/Origin-Schutz und
+  konfigurierbaren Allowlists gehärtet.
+
+> **Update 2026-06-05:** Alle 10 Findings wurden über die PRs #2–#7 remediiert und nach
+> `main` gemergt. Die Testsuite ist von 34 auf 60 Tests gewachsen (alle grün), `ruff`
+> durchgängig sauber. Details siehe Abschnitt 4a (Remediation Status).
 
 ---
 
@@ -74,18 +79,36 @@ sind für diesen no-auth, read-only Server **nicht anwendbar**.
 
 ## 4. Findings Table
 
-| ID | Titel | Kat. | Severity | Aufwand | Betrifft |
+| ID | Titel | Kat. | Severity | Aufwand | Status |
 |---|---|---|---|---|---|
-| F-SEC-01 | ODSQL-Query-Injection über unvalidierte Filterparameter | SEC | **High** | M | beide Transporte |
-| F-SEC-02 | Streamable-HTTP ohne Auth / Origin-Validierung / Rate-Limit | SEC | **High** | M | HTTP/Cloud |
-| F-SEC-03 | Fehlermeldungen leaken Upstream-Body und Exception-Details | SEC | Medium | S | beide |
-| F-SEC-04 | Ungepinnte Abhängigkeiten, kein Lockfile | SEC | Medium | S | Supply Chain |
-| F-OBS-01 | Keinerlei Logging / Observability | OBS | Medium | M | beide |
-| F-SCALE-01 | Neuer httpx-Client pro Request + sequentielles Fan-out | SCALE | Medium | M | Performance |
-| F-SDK-01 | Kein MCP Structured Output / `outputSchema` | SDK | Low | M | Clients |
-| F-OPS-01 | Defektes `.[dev]`-Extra in README + unregistrierter `live`-Marker | OPS | Low | S | DX/CI |
-| F-ARCH-01 | API-Inkonsistenzen (compare_stations, DE/EN-Mix) | ARCH | Low | S | Konsistenz |
-| F-SEC-05 | Breites `except Exception` maskiert Formatierungs-Bug | SEC | Low | S | Robustheit |
+| F-SEC-01 | ODSQL-Query-Injection über unvalidierte Filterparameter | SEC | **High** | M | ✅ closed (PR #2) |
+| F-SEC-02 | Streamable-HTTP ohne Auth / Origin-Validierung / Rate-Limit | SEC | **High** | M | ✅ closed (PR #2) |
+| F-SEC-03 | Fehlermeldungen leaken Upstream-Body und Exception-Details | SEC | Medium | S | ✅ closed (PR #5) |
+| F-SEC-04 | Ungepinnte Abhängigkeiten, kein Lockfile | SEC | Medium | S | ✅ closed (PR #5) |
+| F-OBS-01 | Keinerlei Logging / Observability | OBS | Medium | M | ✅ closed (PR #3) |
+| F-SCALE-01 | Neuer httpx-Client pro Request + sequentielles Fan-out | SCALE | Medium | M | ✅ closed (PR #4) |
+| F-SDK-01 | Kein MCP Structured Output / `outputSchema` | SDK | Low | M | ✅ closed (PR #7) |
+| F-OPS-01 | Defektes `.[dev]`-Extra in README + unregistrierter `live`-Marker | OPS | Low | S | ✅ closed (PR #6) |
+| F-ARCH-01 | API-Inkonsistenzen (compare_stations, DE/EN-Mix) | ARCH | Low | S | ✅ closed (PR #6) |
+| F-SEC-05 | Breites `except Exception` maskiert Formatierungs-Bug | SEC | Low | S | ✅ closed (PR #6) |
+
+---
+
+## 4a. Remediation Status
+
+Alle Findings wurden remediiert und nach `main` gemergt (Audit-Datum 2026-06-04,
+Remediation abgeschlossen 2026-06-05).
+
+| PR | Findings | Kerninhalt |
+|---|---|---|
+| #2 | F-SEC-01, F-SEC-02 | Input-Validierung (`year`/`canton` Regex) + zentrales ODSQL-Escaping; DNS-Rebinding-/Origin-Schutz, konfigurierbarer Bind-Host/Allowlists |
+| #3 | F-OBS-01 | Strukturiertes Logging auf stderr (`LOG_LEVEL`/`LOG_FORMAT`), Request-/Fehler-Logging |
+| #4 | F-SCALE-01 | Gemeinsamer httpx-Client (Connection-Pooling) + paralleles Fan-out in `compare_stations` |
+| #5 | F-SEC-03, F-SEC-04 | Fehler-Sanitisierung (kein Body-/Exception-Leak); Deps mit Major-Caps + `uv.lock` |
+| #6 | F-SEC-05, F-ARCH-01, F-OPS-01 | Robuste Zahlenkonvertierung; `response_format` für `compare_stations`; `.[dev]`-Extra + registrierter pytest-Marker |
+| #7 | F-SDK-01 | MCP `structuredContent` zusätzlich zum Markdown-Text (additiv) |
+
+**Verifikation:** `pytest -m "not live"` → 60 passed; `ruff check` → sauber.
 
 ---
 
@@ -93,7 +116,7 @@ sind für diesen no-auth, read-only Server **nicht anwendbar**.
 
 ### F-SEC-01 — ODSQL-Query-Injection über unvalidierte Filterparameter
 
-**Severity:** High · **Status:** open · **Kategorie:** SEC · **Aufwand:** M (1–3 Tage)
+**Severity:** High · **Status:** ✅ closed · **Kategorie:** SEC · **Aufwand:** M (1–3 Tage)
 
 **Observed Behavior**
 Der Server baut OpenDataSoft-`where`-Klauseln (ODSQL) per String-Interpolation. Mehrere
@@ -148,7 +171,7 @@ def _odsql_str(value: str) -> str:
 
 ### F-SEC-02 — Streamable-HTTP-Transport ohne Authentifizierung, Origin-Validierung und Rate-Limiting
 
-**Severity:** High (nur Cloud) · **Status:** open · **Kategorie:** SEC/SCALE · **Aufwand:** M
+**Severity:** High (nur Cloud) · **Status:** ✅ closed · **Kategorie:** SEC/SCALE · **Aufwand:** M
 
 **Observed Behavior**
 Im HTTP-Modus wird `mcp.run(transport="streamable_http", port=port)` ohne jede
@@ -180,7 +203,7 @@ gebundenen Server ansprechen).
 
 ### F-SEC-03 — Fehlermeldungen leaken Upstream-Body und Exception-Details
 
-**Severity:** Medium · **Status:** open · **Kategorie:** SEC/OBS · **Aufwand:** S
+**Severity:** Medium · **Status:** ✅ closed · **Kategorie:** SEC/OBS · **Aufwand:** S
 
 **Observed Behavior**
 `_handle_api_error` gibt rohe Upstream-Inhalte an den Client zurück:
@@ -198,7 +221,7 @@ schaffende, s. F-OBS-01) Server-Log schreiben.
 
 ### F-SEC-04 — Ungepinnte Abhängigkeiten, kein Lockfile
 
-**Severity:** Medium · **Status:** open · **Kategorie:** SEC (Supply Chain) · **Aufwand:** S
+**Severity:** Medium · **Status:** ✅ closed · **Kategorie:** SEC (Supply Chain) · **Aufwand:** S
 
 **Observed Behavior**
 `pyproject.toml` nutzt offene Floor-Pins (`mcp[cli]>=1.6.0`, `httpx>=0.27.0`,
@@ -213,7 +236,7 @@ CI gegen den Lockfile bauen.
 
 ### F-OBS-01 — Keinerlei Logging / Observability
 
-**Severity:** Medium · **Status:** open · **Kategorie:** OBS · **Aufwand:** M
+**Severity:** Medium · **Status:** ✅ closed · **Kategorie:** OBS · **Aufwand:** M
 
 **Observed Behavior**
 Im gesamten Server existiert **kein** Logging (keine `logging`-Imports, keine Logger,
@@ -230,7 +253,7 @@ gefangene Exceptions einführen; für die Cloud-Variante optional OpenTelemetry-
 
 ### F-SCALE-01 — Neuer httpx-Client pro Request + sequentielles Fan-out
 
-**Severity:** Medium · **Status:** open · **Kategorie:** SCALE · **Aufwand:** M
+**Severity:** Medium · **Status:** ✅ closed · **Kategorie:** SCALE · **Aufwand:** M
 
 **Observed Behavior**
 `_fetch_records` öffnet bei **jedem** Aufruf einen neuen `httpx.AsyncClient`
@@ -246,7 +269,7 @@ in `compare_stations` die Per-Station-Fetches mit `asyncio.gather` parallelisier
 
 ### F-SDK-01 — Kein MCP Structured Output / `outputSchema`
 
-**Severity:** Low · **Status:** open · **Kategorie:** SDK · **Aufwand:** M
+**Severity:** Low · **Status:** ✅ closed · **Kategorie:** SDK · **Aufwand:** M
 
 **Observed Behavior**
 Alle Tools geben `-> str` zurück; im JSON-Modus wird `json.dumps(...)` als **String**
@@ -261,7 +284,7 @@ Structured-Output nutzen, wenn die Client-Basis es unterstützt.
 
 ### F-OPS-01 — Defektes `.[dev]`-Extra in README + unregistrierter `live`-Marker
 
-**Severity:** Low · **Status:** open · **Kategorie:** OPS · **Aufwand:** S
+**Severity:** Low · **Status:** ✅ closed · **Kategorie:** OPS · **Aufwand:** S
 
 **Observed Behavior**
 - README empfiehlt `pip install -e ".[dev]"`, aber es existiert **kein** `[dev]`-Extra
@@ -278,7 +301,7 @@ Structured-Output nutzen, wenn die Client-Basis es unterstützt.
 
 ### F-ARCH-01 — API-Inkonsistenzen
 
-**Severity:** Low · **Status:** open · **Kategorie:** ARCH · **Aufwand:** S
+**Severity:** Low · **Status:** ✅ closed · **Kategorie:** ARCH · **Aufwand:** S
 
 **Observed Behavior**
 - `sbb_compare_stations` bietet als einziges Listen-Tool **kein** `response_format` und
@@ -298,7 +321,7 @@ vereinheitlichen oder bewusst dokumentieren; Quellenhinweis in alle Outputs.
 
 ### F-SEC-05 — Breites `except Exception` maskiert Formatierungs-Bug
 
-**Severity:** Low · **Status:** open · **Kategorie:** SEC/Robustheit · **Aufwand:** S
+**Severity:** Low · **Status:** ✅ closed · **Kategorie:** SEC/Robustheit · **Aufwand:** S
 
 **Observed Behavior**
 In `sbb_get_real_estate_projects` wird `f"- **Nutzfläche:** {area:,} m²"` (`server.py:595`)
@@ -314,18 +337,21 @@ Typ prüfen; das breite `except` enger fassen.
 
 ## 6. Remediation Plan (empfohlene Reihenfolge)
 
+> ✅ **Vollständig abgearbeitet (2026-06-05).** Die ursprünglich empfohlene Sequenz wurde
+> umgesetzt; alle Punkte sind erledigt:
+
 **Vor öffentlichem HTTP-Deployment (Pflicht):**
-1. **F-SEC-01** — Parameter-Validierung/Whitelisting + zentrales ODSQL-Escaping (M)
-2. **F-SEC-02** — Origin/Rate-Limit/Auth-Gate für Streamable HTTP (M)
+1. ✅ **F-SEC-01** — Parameter-Validierung/Whitelisting + zentrales ODSQL-Escaping (PR #2)
+2. ✅ **F-SEC-02** — Origin/Rate-Limit/Auth-Gate für Streamable HTTP (PR #2)
 
 **Kurzfristig (nächster Sprint):**
-3. **F-OBS-01** — Strukturiertes Logging (M)
-4. **F-SEC-03** — Fehler-Detail nicht mehr an Client leaken (S)
-5. **F-SEC-04** — Lockfile committen / Deps pinnen (S)
-6. **F-SCALE-01** — Shared Client + paralleles Fan-out (M)
+3. ✅ **F-OBS-01** — Strukturiertes Logging (PR #3)
+4. ✅ **F-SEC-03** — Fehler-Detail nicht mehr an Client leaken (PR #5)
+5. ✅ **F-SEC-04** — Lockfile committen / Deps pinnen (PR #5)
+6. ✅ **F-SCALE-01** — Shared Client + paralleles Fan-out (PR #4)
 
 **Backlog / Polish:**
-7. F-SDK-01, F-OPS-01, F-ARCH-01, F-SEC-05 (S–M)
+7. ✅ F-SDK-01 (PR #7), F-OPS-01 / F-ARCH-01 / F-SEC-05 (PR #6)
 
 ---
 
@@ -352,8 +378,9 @@ Typ prüfen; das breite `except` enger fassen.
 | Skill-Version | `malkreide/mcp-audit-skill@main` |
 | Katalog | 68 Checks (ARCH 12 · SDK 5 · SEC 23 · SCALE 6 · OBS 6 · HITL 5 · CH 8 · OPS 3) |
 | Katalog-Hash | nicht gepinnt (Remote `main` zum Audit-Zeitpunkt gelesen) |
-| Findings | 10 (0 critical · 2 high · 4 medium · 4 low) |
-| Methodik | Profile → Applicability-Filter → Check-Execution → Findings → Report |
+| Findings | 10 (0 critical · 2 high · 4 medium · 4 low) — **alle closed (PRs #2–#7)** |
+| Remediation | abgeschlossen 2026-06-05; Testsuite 34 → 60 grün, `ruff` sauber |
+| Methodik | Profile → Applicability-Filter → Check-Execution → Findings → Report → Remediation |
 | Evidenz | Code-Review + `ruff check` + `pytest -m "not live"` (34 passed) |
 
 *Findings ohne Datei-/Zeilenreferenz sind Meinungen, keine Findings — alle obigen Findings

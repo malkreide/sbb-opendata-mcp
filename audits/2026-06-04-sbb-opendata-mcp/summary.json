@@ -1,18 +1,21 @@
 {
   "server": "sbb-opendata-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "audit_date": "2026-06-04",
+  "remediation_completed": "2026-06-05",
   "production_ready": {
     "stdio": true,
-    "streamable_http": false,
-    "note": "HTTP/Cloud deployment requires F-SEC-01 and F-SEC-02 before production."
+    "streamable_http": true,
+    "note": "Both high findings (F-SEC-01 ODSQL injection, F-SEC-02 HTTP transport) remediated; the Streamable HTTP / cloud deployment is now hardened (DNS-rebinding/Origin protection, configurable allowlists)."
   },
   "counts": {
     "total": 10,
     "critical": 0,
     "high": 2,
     "medium": 4,
-    "low": 4
+    "low": 4,
+    "closed": 10,
+    "open": 0
   },
   "findings": [
     {
@@ -20,7 +23,8 @@
       "title": "ODSQL query injection via unvalidated filter parameters",
       "category": "SEC",
       "severity": "high",
-      "status": "open",
+      "status": "closed",
+      "resolved_in_pr": 2,
       "effort": "M",
       "evidence": ["src/sbb_opendata_mcp/server.py:310", "src/sbb_opendata_mcp/server.py:557", "src/sbb_opendata_mcp/server.py:645", "src/sbb_opendata_mcp/server.py:647", "src/sbb_opendata_mcp/server.py:649", "src/sbb_opendata_mcp/server.py:881"]
     },
@@ -29,7 +33,8 @@
       "title": "Streamable HTTP transport without auth / origin validation / rate limiting",
       "category": "SEC",
       "severity": "high",
-      "status": "open",
+      "status": "closed",
+      "resolved_in_pr": 2,
       "effort": "M",
       "evidence": ["src/sbb_opendata_mcp/server.py:1058-1070", "src/sbb_opendata_mcp/server.py:42-50"]
     },
@@ -38,7 +43,8 @@
       "title": "Error handler leaks upstream response body and exception details to client",
       "category": "SEC",
       "severity": "medium",
-      "status": "open",
+      "status": "closed",
+      "resolved_in_pr": 5,
       "effort": "S",
       "evidence": ["src/sbb_opendata_mcp/server.py:89", "src/sbb_opendata_mcp/server.py:92"]
     },
@@ -47,7 +53,8 @@
       "title": "Unpinned dependency ranges, no committed lockfile",
       "category": "SEC",
       "severity": "medium",
-      "status": "open",
+      "status": "closed",
+      "resolved_in_pr": 5,
       "effort": "S",
       "evidence": ["pyproject.toml:32-36"]
     },
@@ -56,7 +63,8 @@
       "title": "No logging / observability at all",
       "category": "OBS",
       "severity": "medium",
-      "status": "open",
+      "status": "closed",
+      "resolved_in_pr": 3,
       "effort": "M",
       "evidence": ["src/sbb_opendata_mcp/server.py (no logging imports/usage)"]
     },
@@ -65,7 +73,8 @@
       "title": "New httpx.AsyncClient per request + sequential fan-out in compare_stations",
       "category": "SCALE",
       "severity": "medium",
-      "status": "open",
+      "status": "closed",
+      "resolved_in_pr": 4,
       "effort": "M",
       "evidence": ["src/sbb_opendata_mcp/server.py:75", "src/sbb_opendata_mcp/server.py:879-901", "src/sbb_opendata_mcp/server.py:1027"]
     },
@@ -74,7 +83,8 @@
       "title": "No MCP structured output / outputSchema (string-typed returns)",
       "category": "SDK",
       "severity": "low",
-      "status": "open",
+      "status": "closed",
+      "resolved_in_pr": 7,
       "effort": "M",
       "evidence": ["src/sbb_opendata_mcp/server.py (all tools return str)"]
     },
@@ -83,7 +93,8 @@
       "title": "Broken '.[dev]' extra in README + unregistered pytest 'live' marker",
       "category": "OPS",
       "severity": "low",
-      "status": "open",
+      "status": "closed",
+      "resolved_in_pr": 6,
       "effort": "S",
       "evidence": ["README.md (pip install -e \".[dev]\")", "pyproject.toml (no [project.optional-dependencies])", "tests/test_server.py:456"]
     },
@@ -92,7 +103,8 @@
       "title": "API inconsistencies (compare_stations lacks format/pagination; DE/EN mix; partial attribution)",
       "category": "ARCH",
       "severity": "low",
-      "status": "open",
+      "status": "closed",
+      "resolved_in_pr": 6,
       "effort": "S",
       "evidence": ["src/sbb_opendata_mcp/server.py:237-249"]
     },
@@ -101,7 +113,8 @@
       "title": "Broad 'except Exception' masks a formatting ValueError on real-estate area",
       "category": "SEC",
       "severity": "low",
-      "status": "open",
+      "status": "closed",
+      "resolved_in_pr": 6,
       "effort": "S",
       "evidence": ["src/sbb_opendata_mcp/server.py:595", "src/sbb_opendata_mcp/server.py:605"]
     }
