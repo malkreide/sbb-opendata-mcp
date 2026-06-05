@@ -1,7 +1,7 @@
 ## Finding: F-SEC-01 — ODSQL Query Injection via unvalidated filter parameters
 
 **Severity:** high
-**Status:** open
+**Status:** closed (PR #2, 2026-06-05)
 **Server:** sbb-opendata-mcp
 **Check-Reference:** SEC (input validation / injection)
 **PDF-Reference:** Sec — Server logic: input validation

@@ -1,7 +1,7 @@
 ## Finding: F-SEC-02 — Streamable HTTP transport without auth / origin validation / rate limiting
 
 **Severity:** high (cloud deployment only)
-**Status:** open
+**Status:** closed (PR #2, 2026-06-05)
 **Server:** sbb-opendata-mcp
 **Check-Reference:** SEC / SCALE (transport & gateway)
 **PDF-Reference:** Sec — Defense-in-Depth (gateway layer)
