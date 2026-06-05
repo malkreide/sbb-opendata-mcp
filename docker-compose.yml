@@ -1,0 +1,34 @@
+# Local container run with explicit resource limits.
+#
+#   docker compose up --build
+#
+# The server is reachable at http://127.0.0.1:8000/mcp (Streamable HTTP).
+# No API key is required — all data comes from the public data.sbb.ch portal.
+services:
+  sbb-opendata-mcp:
+    build: .
+    image: sbb-opendata-mcp
+    ports:
+      # Host loopback only; change to "0.0.0.0:8000:8000" to expose deliberately.
+      - "127.0.0.1:8000:8000"
+    environment:
+      MCP_HOST: 0.0.0.0          # inside the container, bind all interfaces
+      MCP_PORT: "8000"
+      LOG_LEVEL: INFO
+      LOG_FORMAT: text
+      # DNS-rebinding / Origin protection for a public deployment (comma-separated).
+      # Defaults allow localhost only — set these to your public hostname/origin.
+      MCP_ALLOWED_HOSTS: ${MCP_ALLOWED_HOSTS:-}
+      MCP_ALLOWED_ORIGINS: ${MCP_ALLOWED_ORIGINS:-}
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    # Cap memory, CPU and file descriptors per container.
+    mem_limit: 256m
+    cpus: 0.50
+    pids_limit: 128
+    ulimits:
+      nofile:
+        soft: 1024
+        hard: 2048
+    restart: unless-stopped
