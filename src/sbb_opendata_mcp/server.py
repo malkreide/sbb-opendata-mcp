@@ -18,6 +18,7 @@ from typing import Any
 import httpx
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
+from mcp.types import CallToolResult, TextContent
 from pydantic import BaseModel, ConfigDict, Field
 
 # ---------------------------------------------------------------------------
@@ -269,6 +270,27 @@ def _to_number(value: Any) -> float | None:
         return None
 
 
+def _tool_result(text: str, structured: dict[str, Any]) -> CallToolResult:
+    """Return human-readable text AND machine-readable structured content.
+
+    The text block preserves the existing markdown/JSON output (non-breaking over
+    MCP), while ``structuredContent`` exposes the underlying records/metadata so
+    programmatic clients can consume them without re-parsing the rendered string.
+    Tools using this set ``structured_output=False`` so FastMCP forwards the
+    result unchanged instead of deriving a trivial ``{"result": <str>}`` schema.
+    """
+    return CallToolResult(
+        content=[TextContent(type="text", text=text)],
+        structuredContent=structured,
+    )
+
+
+def _err(e: Exception) -> CallToolResult:
+    """Wrap a handled error as a tool result (sanitized text + error flag)."""
+    msg = _handle_api_error(e)
+    return _tool_result(msg, {"error": msg})
+
+
 def _pagination_meta(total: int, limit: int, offset: int) -> dict[str, Any]:
     """Reusable pagination metadata block."""
     returned = min(limit, max(0, total - offset))
@@ -465,8 +487,9 @@ class StationSearchInput(BaseModel):
         "idempotentHint": True,
         "openWorldHint": True,
     },
+    structured_output=False,
 )
-async def sbb_get_passenger_frequency(params: PassengerFrequencyInput) -> str:
+async def sbb_get_passenger_frequency(params: PassengerFrequencyInput) -> CallToolResult:
     """Ruft Passagierfrequenzdaten (Ein-/Aussteigende) für SBB-Bahnhöfe ab.
 
     Datensatz wird jährlich aktualisiert. Enthält Tagesschnitt (DTV),
@@ -508,11 +531,12 @@ async def sbb_get_passenger_frequency(params: PassengerFrequencyInput) -> str:
         total = data.get("total_count", 0)
         pagination = _pagination_meta(total, params.limit, params.offset)
 
+        structured = {"pagination": pagination, "results": results}
         if params.response_format == ResponseFormat.JSON:
-            return json.dumps({"pagination": pagination, "results": results}, ensure_ascii=False, indent=2)
+            return _tool_result(json.dumps(structured, ensure_ascii=False, indent=2), structured)
 
         if not results:
-            return "Keine Passagierfrequenzdaten gefunden. Bitte Suchparameter anpassen."
+            return _tool_result("Keine Passagierfrequenzdaten gefunden. Bitte Suchparameter anpassen.", structured)
 
         lines = ["## SBB Passagierfrequenz\n"]
         lines.append(f"*Resultate: {pagination['returned']} von {pagination['total_count']}*\n")
@@ -538,10 +562,10 @@ async def sbb_get_passenger_frequency(params: PassengerFrequencyInput) -> str:
         if pagination["has_more"]:
             lines.append(f"\n*Weitere Resultate verfügbar. Nächster Offset: {pagination['next_offset']}*")
 
-        return "\n".join(lines)
+        return _tool_result("\n".join(lines), structured)
 
     except Exception as e:
-        return _handle_api_error(e)
+        return _err(e)
 
 
 @mcp.tool(
@@ -553,8 +577,9 @@ async def sbb_get_passenger_frequency(params: PassengerFrequencyInput) -> str:
         "idempotentHint": False,
         "openWorldHint": True,
     },
+    structured_output=False,
 )
-async def sbb_get_rail_disruptions(params: RailDisruptionsInput) -> str:
+async def sbb_get_rail_disruptions(params: RailDisruptionsInput) -> CallToolResult:
     """Ruft aktuelle Bahnverkehrsstörungen und -meldungen ab (alle 5 Minuten aktualisiert).
 
     Enthält Titel, Beschreibung, Ursache, Start-/Endzeitpunkt und betroffene Linien.
@@ -582,11 +607,12 @@ async def sbb_get_rail_disruptions(params: RailDisruptionsInput) -> str:
         total = data.get("total_count", 0)
         pagination = _pagination_meta(total, params.limit, params.offset)
 
+        structured = {"pagination": pagination, "results": results}
         if params.response_format == ResponseFormat.JSON:
-            return json.dumps({"pagination": pagination, "results": results}, ensure_ascii=False, indent=2)
+            return _tool_result(json.dumps(structured, ensure_ascii=False, indent=2), structured)
 
         if not results:
-            return "Keine aktuellen Störungsmeldungen gefunden."
+            return _tool_result("Keine aktuellen Störungsmeldungen gefunden.", structured)
 
         lines = ["## SBB Bahnverkehrsmeldungen (Live, alle 5 Min.)\n"]
         lines.append(f"*{pagination['returned']} von {pagination['total_count']} Meldungen*\n")
@@ -616,10 +642,10 @@ async def sbb_get_rail_disruptions(params: RailDisruptionsInput) -> str:
         if pagination["has_more"]:
             lines.append(f"*Weitere Meldungen verfügbar. Nächster Offset: {pagination['next_offset']}*")
 
-        return "\n".join(lines)
+        return _tool_result("\n".join(lines), structured)
 
     except Exception as e:
-        return _handle_api_error(e)
+        return _err(e)
 
 
 @mcp.tool(
@@ -631,8 +657,9 @@ async def sbb_get_rail_disruptions(params: RailDisruptionsInput) -> str:
         "idempotentHint": True,
         "openWorldHint": True,
     },
+    structured_output=False,
 )
-async def sbb_get_infrastructure_construction_projects(params: ConstructionProjectsInput) -> str:
+async def sbb_get_infrastructure_construction_projects(params: ConstructionProjectsInput) -> CallToolResult:
     """Ruft laufende SBB-Infrastruktur-Bauprojekte (Bahnhöfe, Strecken, Ausbau) ab.
 
     Enthält Projektname, Ort, Projektart, Angebotsschritt und Links zu Projektseiten.
@@ -671,11 +698,12 @@ async def sbb_get_infrastructure_construction_projects(params: ConstructionProje
         total = data.get("total_count", 0)
         pagination = _pagination_meta(total, params.limit, params.offset)
 
+        structured = {"pagination": pagination, "results": results}
         if params.response_format == ResponseFormat.JSON:
-            return json.dumps({"pagination": pagination, "results": results}, ensure_ascii=False, indent=2)
+            return _tool_result(json.dumps(structured, ensure_ascii=False, indent=2), structured)
 
         if not results:
-            return "Keine Infrastruktur-Bauprojekte mit diesen Filterkriterien gefunden."
+            return _tool_result("Keine Infrastruktur-Bauprojekte mit diesen Filterkriterien gefunden.", structured)
 
         lines = ["## SBB Infrastruktur-Bauprojekte\n"]
         lines.append(f"*{pagination['returned']} von {pagination['total_count']} Projekten*\n")
@@ -700,10 +728,10 @@ async def sbb_get_infrastructure_construction_projects(params: ConstructionProje
         if pagination["has_more"]:
             lines.append(f"*Weitere Projekte verfügbar. Nächster Offset: {pagination['next_offset']}*")
 
-        return "\n".join(lines)
+        return _tool_result("\n".join(lines), structured)
 
     except Exception as e:
-        return _handle_api_error(e)
+        return _err(e)
 
 
 @mcp.tool(
@@ -715,8 +743,9 @@ async def sbb_get_infrastructure_construction_projects(params: ConstructionProje
         "idempotentHint": True,
         "openWorldHint": True,
     },
+    structured_output=False,
 )
-async def sbb_get_real_estate_projects(params: RealEstateProjectsInput) -> str:
+async def sbb_get_real_estate_projects(params: RealEstateProjectsInput) -> CallToolResult:
     """Ruft laufende SBB-Immobilien-Bauprojekte (Wohn- und Geschäftsbauten) ab.
 
     Täglich aktualisiert. Enthält Projektname, Stadt, Bauphase, Nutzfläche,
@@ -754,11 +783,12 @@ async def sbb_get_real_estate_projects(params: RealEstateProjectsInput) -> str:
         total = data.get("total_count", 0)
         pagination = _pagination_meta(total, params.limit, params.offset)
 
+        structured = {"pagination": pagination, "results": results}
         if params.response_format == ResponseFormat.JSON:
-            return json.dumps({"pagination": pagination, "results": results}, ensure_ascii=False, indent=2)
+            return _tool_result(json.dumps(structured, ensure_ascii=False, indent=2), structured)
 
         if not results:
-            return "Keine Immobilien-Bauprojekte mit diesen Filterkriterien gefunden."
+            return _tool_result("Keine Immobilien-Bauprojekte mit diesen Filterkriterien gefunden.", structured)
 
         lines = ["## SBB Immobilien-Bauprojekte\n"]
         lines.append(f"*{pagination['returned']} von {pagination['total_count']} Projekten*\n")
@@ -786,10 +816,10 @@ async def sbb_get_real_estate_projects(params: RealEstateProjectsInput) -> str:
         if pagination["has_more"]:
             lines.append(f"*Weitere Projekte verfügbar. Nächster Offset: {pagination['next_offset']}*")
 
-        return "\n".join(lines)
+        return _tool_result("\n".join(lines), structured)
 
     except Exception as e:
-        return _handle_api_error(e)
+        return _err(e)
 
 
 @mcp.tool(
@@ -801,8 +831,9 @@ async def sbb_get_real_estate_projects(params: RealEstateProjectsInput) -> str:
         "idempotentHint": True,
         "openWorldHint": True,
     },
+    structured_output=False,
 )
-async def sbb_get_trains_per_segment(params: TrainsPerSegmentInput) -> str:
+async def sbb_get_trains_per_segment(params: TrainsPerSegmentInput) -> CallToolResult:
     """Ruft Anzahl Züge pro Streckenabschnitt und Verkehrstyp ab.
 
     Deckt SBB, BLS, SOB, DB und weitere Infrastrukturbetreiberinnen ab.
@@ -848,11 +879,12 @@ async def sbb_get_trains_per_segment(params: TrainsPerSegmentInput) -> str:
         total = data.get("total_count", 0)
         pagination = _pagination_meta(total, params.limit, params.offset)
 
+        structured = {"pagination": pagination, "results": results}
         if params.response_format == ResponseFormat.JSON:
-            return json.dumps({"pagination": pagination, "results": results}, ensure_ascii=False, indent=2)
+            return _tool_result(json.dumps(structured, ensure_ascii=False, indent=2), structured)
 
         if not results:
-            return "Keine Zugzahlen-Daten mit diesen Filterkriterien gefunden."
+            return _tool_result("Keine Zugzahlen-Daten mit diesen Filterkriterien gefunden.", structured)
 
         lines = ["## SBB Zugzahlen pro Streckenabschnitt\n"]
         lines.append(f"*{pagination['returned']} von {pagination['total_count']} Abschnitten*\n")
@@ -872,10 +904,10 @@ async def sbb_get_trains_per_segment(params: TrainsPerSegmentInput) -> str:
         if pagination["has_more"]:
             lines.append(f"\n*Weitere Abschnitte verfügbar. Nächster Offset: {pagination['next_offset']}*")
 
-        return "\n".join(lines)
+        return _tool_result("\n".join(lines), structured)
 
     except Exception as e:
-        return _handle_api_error(e)
+        return _err(e)
 
 
 @mcp.tool(
@@ -887,8 +919,9 @@ async def sbb_get_trains_per_segment(params: TrainsPerSegmentInput) -> str:
         "idempotentHint": True,
         "openWorldHint": True,
     },
+    structured_output=False,
 )
-async def sbb_get_platform_data(params: PlatformDataInput) -> str:
+async def sbb_get_platform_data(params: PlatformDataInput) -> CallToolResult:
     """Ruft Perrondaten (Länge, Fläche, Typ) für SBB-Bahnhöfe ab.
 
     Enthält Perronlänge (m), Netto-/Bruttofläche (m²), Perrontyp und
@@ -928,11 +961,12 @@ async def sbb_get_platform_data(params: PlatformDataInput) -> str:
         total = data.get("total_count", 0)
         pagination = _pagination_meta(total, params.limit, params.offset)
 
+        structured = {"pagination": pagination, "results": results}
         if params.response_format == ResponseFormat.JSON:
-            return json.dumps({"pagination": pagination, "results": results}, ensure_ascii=False, indent=2)
+            return _tool_result(json.dumps(structured, ensure_ascii=False, indent=2), structured)
 
         if not results:
-            return "Keine Perrondaten mit diesen Filterkriterien gefunden."
+            return _tool_result("Keine Perrondaten mit diesen Filterkriterien gefunden.", structured)
 
         lines = ["## SBB Perrondaten\n"]
         lines.append(f"*{pagination['returned']} von {pagination['total_count']} Perrons*\n")
@@ -951,10 +985,10 @@ async def sbb_get_platform_data(params: PlatformDataInput) -> str:
         if pagination["has_more"]:
             lines.append(f"\n*Weitere Perrons verfügbar. Nächster Offset: {pagination['next_offset']}*")
 
-        return "\n".join(lines)
+        return _tool_result("\n".join(lines), structured)
 
     except Exception as e:
-        return _handle_api_error(e)
+        return _err(e)
 
 
 @mcp.tool(
@@ -966,8 +1000,9 @@ async def sbb_get_platform_data(params: PlatformDataInput) -> str:
         "idempotentHint": True,
         "openWorldHint": True,
     },
+    structured_output=False,
 )
-async def sbb_get_rolling_stock(params: RollingStockInput) -> str:
+async def sbb_get_rolling_stock(params: RollingStockInput) -> CallToolResult:
     """Ruft technische Daten zum SBB-Rollmaterial (Züge, Triebzüge, Wagen) ab.
 
     Enthält Fahrzeugtyp, Sitzplatzkapazität (1./2. Kl.), Baujahr, Länge und Gewicht.
@@ -1002,11 +1037,12 @@ async def sbb_get_rolling_stock(params: RollingStockInput) -> str:
         total = data.get("total_count", 0)
         pagination = _pagination_meta(total, params.limit, params.offset)
 
+        structured = {"pagination": pagination, "results": results}
         if params.response_format == ResponseFormat.JSON:
-            return json.dumps({"pagination": pagination, "results": results}, ensure_ascii=False, indent=2)
+            return _tool_result(json.dumps(structured, ensure_ascii=False, indent=2), structured)
 
         if not results:
-            return "Kein Rollmaterial mit diesem Fahrzeugtyp gefunden."
+            return _tool_result("Kein Rollmaterial mit diesem Fahrzeugtyp gefunden.", structured)
 
         lines = ["## SBB Rollmaterial\n"]
         lines.append(f"*{pagination['returned']} von {pagination['total_count']} Fahrzeugen*\n")
@@ -1026,10 +1062,10 @@ async def sbb_get_rolling_stock(params: RollingStockInput) -> str:
         if pagination["has_more"]:
             lines.append(f"\n*Weitere Fahrzeuge verfügbar. Nächster Offset: {pagination['next_offset']}*")
 
-        return "\n".join(lines)
+        return _tool_result("\n".join(lines), structured)
 
     except Exception as e:
-        return _handle_api_error(e)
+        return _err(e)
 
 
 @mcp.tool(
@@ -1041,8 +1077,9 @@ async def sbb_get_rolling_stock(params: RollingStockInput) -> str:
         "idempotentHint": True,
         "openWorldHint": True,
     },
+    structured_output=False,
 )
-async def sbb_compare_stations(params: CompareStationsInput) -> str:
+async def sbb_compare_stations(params: CompareStationsInput) -> CallToolResult:
     """Vergleicht mehrere SBB-Bahnhöfe anhand Passagierfrequenz und Perrondaten.
 
     Kombiniert drei Datensätze (Passagierfrequenz, Bahnhofnutzer, Perrons) zu einem
@@ -1100,12 +1137,9 @@ async def sbb_compare_stations(params: CompareStationsInput) -> str:
         for station, info in await asyncio.gather(*(_collect(s) for s in params.stations)):
             results_by_station[station].update(info)
 
+        structured = {"year": year_filter, "stations": list(results_by_station.values())}
         if params.response_format == ResponseFormat.JSON:
-            return json.dumps(
-                {"year": year_filter, "stations": list(results_by_station.values())},
-                ensure_ascii=False,
-                indent=2,
-            )
+            return _tool_result(json.dumps(structured, ensure_ascii=False, indent=2), structured)
 
         lines = [f"## Bahnhofvergleich ({year_filter})\n"]
         lines.append("| Bahnhof | Kanton | DTV (tägl.) | DWV (werktags) | Perrons | Gesamtlänge (m) |")
@@ -1121,10 +1155,10 @@ async def sbb_compare_stations(params: CompareStationsInput) -> str:
             lines.append(f"| {name} | {canton} | {dtv} | {dwv} | {pc} | {pl} |")
 
         lines.append("\n*Quellen: SBB Passagierfrequenz + Perrondaten | data.sbb.ch*")
-        return "\n".join(lines)
+        return _tool_result("\n".join(lines), structured)
 
     except Exception as e:
-        return _handle_api_error(e)
+        return _err(e)
 
 
 @mcp.tool(
@@ -1136,8 +1170,9 @@ async def sbb_compare_stations(params: CompareStationsInput) -> str:
         "idempotentHint": True,
         "openWorldHint": True,
     },
+    structured_output=False,
 )
-async def sbb_search_stations(params: StationSearchInput) -> str:
+async def sbb_search_stations(params: StationSearchInput) -> CallToolResult:
     """Sucht Bahnhöfe und Haltestellen der Schweiz (DiDok-Liste des BAV).
 
     Deckt alle öV-Haltestellen ab (nicht nur SBB). Enthält UIC-Nummern,
@@ -1171,12 +1206,13 @@ async def sbb_search_stations(params: StationSearchInput) -> str:
 
         results = data.get("results", [])
         total = data.get("total_count", 0)
+        structured = {"total_count": total, "results": results}
 
         if params.response_format == ResponseFormat.JSON:
-            return json.dumps({"total_count": total, "results": results}, ensure_ascii=False, indent=2)
+            return _tool_result(json.dumps(structured, ensure_ascii=False, indent=2), structured)
 
         if not results:
-            return f"Keine Haltestellen für '{params.query}' gefunden."
+            return _tool_result(f"Keine Haltestellen für '{params.query}' gefunden.", structured)
 
         lines = [f"## Haltestellen: '{params.query}'\n"]
         lines.append(f"*{len(results)} von {total} Resultaten*\n")
@@ -1192,10 +1228,10 @@ async def sbb_search_stations(params: StationSearchInput) -> str:
         if total > params.limit:
             lines.append(f"\n*{total - params.limit} weitere Resultate – Suchbegriff präzisieren.*")
 
-        return "\n".join(lines)
+        return _tool_result("\n".join(lines), structured)
 
     except Exception as e:
-        return _handle_api_error(e)
+        return _err(e)
 
 
 @mcp.tool(
@@ -1207,8 +1243,9 @@ async def sbb_search_stations(params: StationSearchInput) -> str:
         "idempotentHint": True,
         "openWorldHint": True,
     },
+    structured_output=False,
 )
-async def sbb_list_datasets() -> str:
+async def sbb_list_datasets() -> CallToolResult:
     """Listet alle verfügbaren SBB Open Data Datensätze (data.sbb.ch) auf.
 
     Gibt Dataset-ID, Titel, Anzahl Datensätze und Aktualisierungsfrequenz zurück.
@@ -1229,6 +1266,7 @@ async def sbb_list_datasets() -> str:
 
         results = data.get("results", [])
         total = data.get("total_count", 0)
+        structured = {"total_count": total, "datasets": results}
 
         lines = [f"## SBB Open Data – {total} Datensätze (data.sbb.ch)\n"]
         lines.append("| Dataset ID | Titel | Datensätze | Aktualisierung |")
@@ -1243,10 +1281,10 @@ async def sbb_list_datasets() -> str:
             lines.append(f"| `{ds_id}` | {title} | {records} | {freq} |")
 
         lines.append("\n*Quelle: data.sbb.ch | API: OpenDataSoft v2.1 | Kein API-Key erforderlich*")
-        return "\n".join(lines)
+        return _tool_result("\n".join(lines), structured)
 
     except Exception as e:
-        return _handle_api_error(e)
+        return _err(e)
 
 
 # ---------------------------------------------------------------------------
