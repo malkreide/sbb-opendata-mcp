@@ -1,5 +1,32 @@
 # Changelog
 
+Alle relevanten Änderungen an diesem Projekt werden hier dokumentiert.
+All notable changes to this project are documented here.
+
+## [0.3.0] — 2026-06-05
+
+Dokumentation und Repository-Struktur an die Konventionen des
+[Swiss Public Data MCP Portfolios](https://github.com/malkreide/swiss-public-data-mcp)
+(Referenz: [swiss-transport-mcp](https://github.com/malkreide/swiss-transport-mcp))
+angeglichen. Keine Code- oder Verhaltensänderung am Server – die 60 Tests bleiben grün.
+
+### Added
+- **CI:** `.github/workflows/ci.yml` (GitHub Actions, Test + Lint über Python 3.11/3.12/3.13).
+- **Docker:** Multi-Stage, Non-Root `Dockerfile`, `docker-compose.yml` mit Ressourcenlimits
+  (`read_only`, `no-new-privileges`, Memory-/CPU-/PID-Limits) und `.dockerignore`.
+- **Dokumentation:** `CONTRIBUTING.md` / `CONTRIBUTING.de.md`, `SECURITY.md` / `SECURITY.de.md`,
+  `EXAMPLES.md` (Anwendungsfälle nach Zielgruppe) und ein `docs/assets/demo.svg`.
+- **Audit:** `audits/RISK-ACCEPTANCES.md` (Risk Acceptance Register für die auf
+  Portfolio-/Gateway-Ebene akzeptierten Kontrollen).
+
+### Changed
+- **README:** `README.md` / `README.de.md` auf die Portfolio-Struktur umgestellt
+  (Portfolio-Header, CI-Badge, Overview, Features, Prerequisites, Quickstart,
+  Configuration, Available Tools, Architecture, Project Structure, Safety & Limits,
+  Known Limitations, Testing, Author, Credits & Related Projects).
+- **Versionsangleich:** `pyproject.toml` und `__init__.py` auf `0.3.0` gehoben
+  (zuvor inkonsistent: `0.2.0` / `0.1.0`).
+
 ## [0.2.0] — 2026-06-05
 
 Vollständige Remediation des MCP-Audits ([mcp-audit-skill](https://github.com/malkreide/mcp-audit-skill)):

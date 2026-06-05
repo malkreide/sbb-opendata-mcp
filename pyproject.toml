@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sbb-opendata-mcp"
-version = "0.2.0"
+version = "0.3.0"
 description = "MCP Server for Swiss Federal Railways (SBB) open data via data.sbb.ch"
 readme = "README.md"
 license = { file = "LICENSE" }
