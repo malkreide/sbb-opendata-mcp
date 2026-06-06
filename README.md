@@ -2,7 +2,7 @@
 
 🇨🇭 **Part of the [Swiss Public Data MCP Portfolio](https://github.com/malkreide/swiss-public-data-mcp)**
 
-![Version](https://img.shields.io/badge/version-0.3.0-blue)
+[![PyPI](https://img.shields.io/pypi/v/sbb-opendata-mcp)](https://pypi.org/project/sbb-opendata-mcp/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![MCP](https://img.shields.io/badge/MCP-Model%20Context%20Protocol-purple)](https://modelcontextprotocol.io/)
@@ -68,19 +68,24 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ## Installation
 
-```bash
-# Clone the repository
-git clone https://github.com/malkreide/sbb-opendata-mcp.git
-cd sbb-opendata-mcp
+From [PyPI](https://pypi.org/project/sbb-opendata-mcp/):
 
-# Install
-pip install -e .
+```bash
+pip install sbb-opendata-mcp
 ```
 
 Or with `uvx` (no permanent installation):
 
 ```bash
 uvx sbb-opendata-mcp
+```
+
+For local development, install from a clone in editable mode:
+
+```bash
+git clone https://github.com/malkreide/sbb-opendata-mcp.git
+cd sbb-opendata-mcp
+pip install -e ".[dev]"
 ```
 
 ---
