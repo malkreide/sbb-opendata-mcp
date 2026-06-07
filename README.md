@@ -336,3 +336,5 @@ Hayal Oezkan · [github.com/malkreide](https://github.com/malkreide)
   - [swiss-road-mobility-mcp](https://github.com/malkreide/swiss-road-mobility-mcp) – micromobility & EV charging
   - [zurich-opendata-mcp](https://github.com/malkreide/zurich-opendata-mcp) – MCP server for Zurich city open data
 - **Portfolio:** [Swiss Public Data MCP Portfolio](https://github.com/malkreide/swiss-public-data-mcp)
+
+<!-- mcp-name: io.github.malkreide/sbb-opendata-mcp -->
