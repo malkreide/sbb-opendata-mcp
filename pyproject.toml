@@ -47,6 +47,7 @@ dev = [
 sbb-opendata-mcp = "sbb_opendata_mcp.server:mcp.run"
 
 [project.urls]
+"mcp-name" = "io.github.malkreide/sbb-opendata-mcp"
 Homepage = "https://github.com/malkreide/sbb-opendata-mcp"
 Repository = "https://github.com/malkreide/sbb-opendata-mcp"
 Issues = "https://github.com/malkreide/sbb-opendata-mcp/issues"
