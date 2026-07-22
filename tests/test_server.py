@@ -320,8 +320,12 @@ class TestLogging:
         assert len(logger.handlers) == before
         stream_handlers = [h for h in logger.handlers if isinstance(h, logging.StreamHandler)]
         assert stream_handlers, "expected a stream handler"
-        # Logs must never go to stdout (stdio JSON-RPC channel).
-        assert all(h.stream is sys.stderr for h in stream_handlers)
+        # Logs must never go to stdout (stdio JSON-RPC channel). Test runners
+        # (e.g. pytest) attach their own capture StreamHandlers to this logger,
+        # so assert on intent rather than on every handler: nothing targets
+        # stdout, and the handler we configured targets stderr.
+        assert all(getattr(h, "stream", None) is not sys.stdout for h in stream_handlers)
+        assert any(getattr(h, "stream", None) is sys.stderr for h in stream_handlers)
         assert logger.propagate is False
 
     def test_json_formatter_outputs_valid_json(self):

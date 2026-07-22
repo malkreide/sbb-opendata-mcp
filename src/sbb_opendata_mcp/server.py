@@ -63,6 +63,28 @@ class _JsonFormatter(logging.Formatter):
         return json.dumps(payload, ensure_ascii=False)
 
 
+class _StderrHandler(logging.StreamHandler):
+    """StreamHandler that always writes to the *current* ``sys.stderr``.
+
+    Binding to ``sys.stderr`` at construction time is fragile: test runners
+    (pytest) swap ``sys.stderr`` per test phase, so a stream captured at import
+    time goes stale. Resolving it dynamically — as CPython's own
+    ``logging._StderrHandler`` does — keeps logs on stderr no matter what, and
+    off stdout (the stdio JSON-RPC channel).
+    """
+
+    def __init__(self) -> None:
+        logging.Handler.__init__(self)
+
+    @property
+    def stream(self):  # type: ignore[override]
+        return sys.stderr
+
+    @stream.setter
+    def stream(self, value):  # noqa: D401 - kept dynamic; ignore assignments
+        pass
+
+
 def configure_logging() -> None:
     """Attach a single stderr handler to the package logger.
 
@@ -75,7 +97,7 @@ def configure_logging() -> None:
     """
     if logger.handlers:
         return
-    handler = logging.StreamHandler(sys.stderr)
+    handler = _StderrHandler()
     if os.environ.get("LOG_FORMAT", "text").lower() == "json":
         handler.setFormatter(_JsonFormatter())
     else:
