@@ -16,7 +16,7 @@ from enum import StrEnum
 from typing import Any
 
 import httpx
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import CallToolResult, TextContent
 from pydantic import BaseModel, ConfigDict, Field
@@ -155,7 +155,7 @@ def _transport_security() -> TransportSecuritySettings:
 
 
 @asynccontextmanager
-async def _lifespan(_server: FastMCP) -> AsyncIterator[dict[str, Any]]:
+async def _lifespan(_server: MCPServer) -> AsyncIterator[dict[str, Any]]:
     """Close the shared HTTP client when the server shuts down."""
     try:
         yield {}
@@ -163,7 +163,7 @@ async def _lifespan(_server: FastMCP) -> AsyncIterator[dict[str, Any]]:
         await _aclose_client()
 
 
-mcp = FastMCP(
+mcp = MCPServer(
     "sbb_opendata_mcp",
     instructions=(
         "SBB Open Data MCP Server: Access Swiss Federal Railways open data. "
@@ -171,9 +171,6 @@ mcp = FastMCP(
         "real estate projects, trains per segment, platform data, rolling stock, and more. "
         "All data from data.sbb.ch — no API key required."
     ),
-    host=os.environ.get("MCP_HOST", "127.0.0.1"),
-    port=int(os.environ.get("MCP_PORT", "8000")),
-    transport_security=_transport_security(),
     lifespan=_lifespan,
 )
 
@@ -298,7 +295,7 @@ def _tool_result(text: str, structured: dict[str, Any]) -> CallToolResult:
     The text block preserves the existing markdown/JSON output (non-breaking over
     MCP), while ``structuredContent`` exposes the underlying records/metadata so
     programmatic clients can consume them without re-parsing the rendered string.
-    Tools using this set ``structured_output=False`` so FastMCP forwards the
+    Tools using this set ``structured_output=False`` so MCPServer forwards the
     result unchanged instead of deriving a trivial ``{"result": <str>}`` schema.
     """
     return CallToolResult(
@@ -1315,14 +1312,18 @@ async def sbb_list_datasets() -> CallToolResult:
 
 if __name__ == "__main__":
     use_http = "--http" in sys.argv
+    # mcp 2.x: MCPServer.settings no longer carries host/port; the bind address
+    # is a run() kwarg, so it is tracked in locals here.
+    bind_host = "127.0.0.1"
+    bind_port = 8000
     for i, arg in enumerate(sys.argv):
         if arg == "--port" and i + 1 < len(sys.argv):
-            mcp.settings.port = int(sys.argv[i + 1])
+            bind_port = int(sys.argv[i + 1])
 
     if use_http:
         _log(logging.INFO, "server_start", transport="streamable-http",
-             host=mcp.settings.host, port=mcp.settings.port)
-        mcp.run(transport="streamable-http")
+             host=bind_host, port=bind_port)
+        mcp.run(transport="streamable-http", host=bind_host, port=bind_port)
     else:
         _log(logging.INFO, "server_start", transport="stdio")
         mcp.run()

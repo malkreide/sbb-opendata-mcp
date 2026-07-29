@@ -758,8 +758,8 @@ class TestStructuredOutput:
         assert isinstance(result, CallToolResult)
         assert "## SBB Passagierfrequenz" in result.content[0].text
         # ... and the underlying records are exposed as structured content.
-        assert result.structuredContent["results"][0]["bahnhof_gare_stazione"] == "Zürich HB"
-        assert "pagination" in result.structuredContent
+        assert result.structured_content["results"][0]["bahnhof_gare_stazione"] == "Zürich HB"
+        assert "pagination" in result.structured_content
 
     @pytest.mark.asyncio
     async def test_empty_result_still_structured(self):
@@ -769,7 +769,7 @@ class TestStructuredOutput:
             return_value=mock_api_response([]),
         ):
             result = await sbb_get_platform_data(PlatformDataInput(station_name="XYZ"))
-        assert result.structuredContent["results"] == []
+        assert result.structured_content["results"] == []
 
     @pytest.mark.asyncio
     async def test_error_result_flagged_in_structured_content(self):
@@ -779,7 +779,7 @@ class TestStructuredOutput:
             side_effect=ValueError("boom"),
         ):
             result = await sbb_get_rolling_stock(RollingStockInput())
-        assert "error" in result.structuredContent
+        assert "error" in result.structured_content
         assert "Fehler" in result.content[0].text
 
 
