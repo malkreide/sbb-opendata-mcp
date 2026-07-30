@@ -277,12 +277,23 @@ class TestOdsqlQuote:
 
 
 class TestTransportSecurity:
+    """SEC-005, inbound half.
+
+    These tests used to cover only the builder. It was never called: the
+    migration to mcp 2.x dropped ``transport_security=_transport_security()``
+    from the constructor without re-adding it as a ``run()`` kwarg, so the
+    allow-list became dead code while these tests stayed green. Coverage of a
+    protection that is not wired is worse than no coverage, because it reads as
+    assurance. ``TestTransportSecurityIsWired`` below closes that.
+    """
+
     def test_defaults_to_localhost_with_protection(self, monkeypatch):
         from sbb_opendata_mcp.server import _transport_security
 
         monkeypatch.delenv("MCP_ALLOWED_HOSTS", raising=False)
         monkeypatch.delenv("MCP_ALLOWED_ORIGINS", raising=False)
-        ts = _transport_security()
+        ts = _transport_security("127.0.0.1")
+        assert ts is not None
         assert ts.enable_dns_rebinding_protection is True
         assert "127.0.0.1" in ts.allowed_hosts
         assert "localhost" in ts.allowed_hosts
@@ -293,8 +304,110 @@ class TestTransportSecurity:
         monkeypatch.setenv("MCP_ALLOWED_HOSTS", "sbb.example.com, sbb.example.com:*")
         monkeypatch.setenv("MCP_ALLOWED_ORIGINS", "https://sbb.example.com")
         ts = _transport_security()
+        assert ts is not None
         assert ts.allowed_hosts == ["sbb.example.com", "sbb.example.com:*"]
         assert ts.allowed_origins == ["https://sbb.example.com"]
+
+    def test_wildcard_bind_without_allowlist_stays_off(self, monkeypatch):
+        """0.0.0.0 with no MCP_ALLOWED_HOSTS: the reachable name is unknown here.
+
+        Returning the loopback default would reject every real request with
+        HTTP 421 — the failure this whole change exists to prevent. So the
+        protection stays off and the caller warns, which leaves the SDK's own
+        behaviour for a non-loopback bind unchanged.
+        """
+        from sbb_opendata_mcp.server import _transport_security
+
+        monkeypatch.delenv("MCP_ALLOWED_HOSTS", raising=False)
+        assert _transport_security("0.0.0.0") is None
+
+    def test_wildcard_bind_with_allowlist_is_protected(self, monkeypatch):
+        from sbb_opendata_mcp.server import _transport_security
+
+        monkeypatch.setenv("MCP_ALLOWED_HOSTS", "sbb.example.com")
+        ts = _transport_security("0.0.0.0")
+        assert ts is not None
+        assert ts.allowed_hosts == ["sbb.example.com"]
+
+
+class TestBindHost:
+    """The container asks for 0.0.0.0 via MCP_HOST; the code must read it."""
+
+    def test_defaults_to_loopback(self, monkeypatch):
+        from sbb_opendata_mcp.server import _bind_host
+
+        monkeypatch.delenv("MCP_HOST", raising=False)
+        assert _bind_host() == "127.0.0.1"
+
+    def test_mcp_host_is_honoured(self, monkeypatch):
+        """The regression this guards: the Dockerfile sets MCP_HOST=0.0.0.0 and
+        publishes 8000. A hardcoded loopback bind means the published port
+        reaches nothing inside the container."""
+        from sbb_opendata_mcp.server import _bind_host
+
+        monkeypatch.setenv("MCP_HOST", "0.0.0.0")
+        assert _bind_host() == "0.0.0.0"
+
+    def test_the_dockerfile_still_sets_it(self):
+        """Pins the pair. If the Dockerfile stops setting MCP_HOST, reading it is
+        pointless; if the code stops reading it, the container breaks. Either
+        drift should be a deliberate edit, not a silent one."""
+        import pathlib
+        import re
+
+        dockerfile = (
+            pathlib.Path(__file__).resolve().parents[1] / "Dockerfile"
+        ).read_text()
+        assert re.search(r"MCP_HOST\s*=\s*0\.0\.0\.0", dockerfile)
+
+
+class TestTransportSecurityIsWired:
+    """The allow-list must reach the transport, not merely be constructible."""
+
+    def test_run_receives_the_transport_security(self, monkeypatch):
+        """Guards the actual regression.
+
+        The builder and its unit tests survived the migration untouched; what
+        vanished was the single kwarg that connected them to the server. So the
+        assertion is on the call itself.
+        """
+        import sbb_opendata_mcp.server as srv
+
+        monkeypatch.setenv("MCP_ALLOWED_HOSTS", "sbb.example.com")
+        monkeypatch.setenv("MCP_HOST", "0.0.0.0")
+        captured: dict = {}
+        monkeypatch.setattr(type(srv.mcp), "run", lambda self, **kw: captured.update(kw))
+
+        srv.main(["sbb-opendata-mcp", "--http"])
+
+        assert captured["transport"] == "streamable-http"
+        assert captured["host"] == "0.0.0.0"
+        assert captured["transport_security"] is not None
+        assert captured["transport_security"].allowed_hosts == ["sbb.example.com"]
+
+    def test_stdio_gets_no_transport_kwargs(self, monkeypatch):
+        """stdio has no listener, so a bind or allow-list there would be noise."""
+        import sbb_opendata_mcp.server as srv
+
+        captured: dict = {}
+        monkeypatch.setattr(type(srv.mcp), "run", lambda self, **kw: captured.update(kw))
+
+        srv.main(["sbb-opendata-mcp"])
+
+        assert captured == {}
+
+    def test_cli_host_overrides_the_environment(self, monkeypatch):
+        import sbb_opendata_mcp.server as srv
+
+        monkeypatch.setenv("MCP_HOST", "0.0.0.0")
+        monkeypatch.setenv("MCP_ALLOWED_HOSTS", "sbb.example.com")
+        captured: dict = {}
+        monkeypatch.setattr(type(srv.mcp), "run", lambda self, **kw: captured.update(kw))
+
+        srv.main(["sbb-opendata-mcp", "--http", "--host", "127.0.0.1", "--port", "9001"])
+
+        assert captured["host"] == "127.0.0.1"
+        assert captured["port"] == 9001
 
 
 class TestLogging:

@@ -3,6 +3,46 @@
 Alle relevanten Änderungen an diesem Projekt werden hier dokumentiert.
 All notable changes to this project are documented here.
 
+## [Unreleased]
+
+### Fixed
+
+- **Der Container band Loopback und war von aussen nicht erreichbar.** Das
+  Dockerfile setzt `MCP_HOST=0.0.0.0` und exponiert 8000, aber der Code las
+  `MCP_HOST` nicht mehr: die Migration auf mcp 2.x entfernte
+  `host=os.environ.get("MCP_HOST", "127.0.0.1")` aus dem Konstruktor und ersetzte
+  es durch ein hart verdrahtetes `bind_host = "127.0.0.1"`. Der publizierte Port
+  erreichte damit nichts. `MCP_HOST` wird wieder gelesen, zusätzlich `MCP_PORT`
+  und ein `--host`-Flag analog zum bestehenden `--port`.
+
+- **Die Host/Origin-Allow-List war toter Code — und von zwei Tests gedeckt
+  (SEC-005).** Dieselbe Migration entfernte
+  `transport_security=_transport_security()` aus dem Konstruktor, ohne es als
+  `run()`-Kwarg wieder anzuhängen. `_transport_security()` blieb stehen, seine
+  Unit-Tests blieben grün, und der Server prüfte den Host-Header nie. Testdeckung
+  für einen nicht verdrahteten Schutz ist schlechter als keine, weil sie als
+  Zusicherung gelesen wird.
+
+  Die Allow-List reist jetzt in `run()`. Der Builder liefert bewusst `None`,
+  wenn keine Allow-List ableitbar ist — Nicht-Loopback-Bind ohne
+  `MCP_ALLOWED_HOSTS` —, weil der Loopback-Default dort jede echte Anfrage mit
+  HTTP 421 abweisen würde; der Aufrufer warnt stattdessen. Bestehende
+  Deployments verhalten sich damit unverändert.
+
+- **Der Einstiegspunkt liegt jetzt in `main()`.** Er stand inline im
+  `__main__`-Block, weshalb kein Test die Transport-Verdrahtung sehen konnte —
+  genau das liess die beiden Regressionen oben durchrutschen. Neue Tests prüfen
+  die `run()`-Aufrufe selbst statt nur die Bauteile: dass `host`, `port` und
+  `transport_security` ankommen, dass stdio keine davon bekommt, und dass
+  `--host` die Umgebung überschreibt. Ein weiterer Test nagelt das Paar
+  „Dockerfile setzt `MCP_HOST`" / „Code liest es" zusammen fest.
+
+  Nachgemessen an der echten ASGI-App in drei Szenarien: Container ohne
+  Allow-List lässt alles durch und warnt; Container mit `MCP_ALLOWED_HOSTS`
+  liefert 200 für den richtigen Hostnamen, 421 für `evil.example.com` **und 421
+  für den richtigen Hostnamen auf falschem Port** — nur der letzte Fall
+  unterscheidet eine portgenaue Allow-List von einer, die alles erlaubt.
+
 ## [0.3.0] — 2026-06-05
 
 Dokumentation und Repository-Struktur an die Konventionen des
