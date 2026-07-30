@@ -140,16 +140,37 @@ def _env_list(name: str) -> list[str]:
     return [v.strip() for v in os.environ.get(name, "").split(",") if v.strip()]
 
 
-def _transport_security() -> TransportSecuritySettings:
+def _bind_host() -> str:
+    """The address to bind. ``MCP_HOST`` is how the container asks for 0.0.0.0.
+
+    The Dockerfile sets ``MCP_HOST=0.0.0.0`` and publishes port 8000. Ignoring
+    it means binding loopback *inside* the container, where the published port
+    reaches nothing.
+    """
+    return os.environ.get("MCP_HOST", "127.0.0.1")
+
+
+def _transport_security(host: str | None = None) -> TransportSecuritySettings | None:
     """Build DNS-rebinding / Origin protection for the Streamable HTTP transport.
 
-    DNS-rebinding protection is always enabled. Hosts default to localhost so
-    local HTTP dev works out of the box; override via MCP_ALLOWED_HOSTS /
-    MCP_ALLOWED_ORIGINS (comma-separated) for a public deployment.
+    Returns ``None`` when no allow-list can be derived — a non-loopback bind
+    with no ``MCP_ALLOWED_HOSTS``. The server is then reached under a service or
+    public DNS name this process does not know, and the loopback default would
+    reject every real request with HTTP 421. The caller warns instead, which
+    leaves the SDK's own behaviour for a non-loopback bind unchanged.
+
+    Otherwise DNS-rebinding protection is enabled. Hosts default to localhost so
+    the local HTTP workflow needs no configuration; override via
+    ``MCP_ALLOWED_HOSTS`` / ``MCP_ALLOWED_ORIGINS`` (comma-separated) for a
+    public deployment.
     """
+    allowed = _env_list("MCP_ALLOWED_HOSTS")
+    host = _bind_host() if host is None else host
+    if not allowed and host not in ("127.0.0.1", "localhost", "::1"):
+        return None
     return TransportSecuritySettings(
         enable_dns_rebinding_protection=True,
-        allowed_hosts=_env_list("MCP_ALLOWED_HOSTS") or list(DEFAULT_ALLOWED_HOSTS),
+        allowed_hosts=allowed or list(DEFAULT_ALLOWED_HOSTS),
         allowed_origins=_env_list("MCP_ALLOWED_ORIGINS"),
     )
 
@@ -1310,20 +1331,46 @@ async def sbb_list_datasets() -> CallToolResult:
 # Entry point
 # ---------------------------------------------------------------------------
 
-if __name__ == "__main__":
-    use_http = "--http" in sys.argv
-    # mcp 2.x: MCPServer.settings no longer carries host/port; the bind address
-    # is a run() kwarg, so it is tracked in locals here.
-    bind_host = "127.0.0.1"
-    bind_port = 8000
-    for i, arg in enumerate(sys.argv):
-        if arg == "--port" and i + 1 < len(sys.argv):
-            bind_port = int(sys.argv[i + 1])
+def main(argv: list[str] | None = None) -> None:
+    """Start the server. Extracted from the ``__main__`` block so the transport
+    wiring is testable — the regression this repairs was a missing ``run()``
+    kwarg, which no test could see while the entry point was inline.
+
+    mcp 2.x: ``MCPServer.settings`` no longer carries host/port/transport_security;
+    all three are ``run()`` kwargs and must be passed explicitly. The migration to
+    2.x dropped ``host=os.environ["MCP_HOST"]`` and
+    ``transport_security=_transport_security()`` from the constructor, which left
+    the container binding loopback and the allow-list as dead code.
+    """
+    argv = sys.argv if argv is None else argv
+    use_http = "--http" in argv
+    bind_host = _bind_host()
+    bind_port = int(os.environ.get("MCP_PORT", "8000"))
+    for i, arg in enumerate(argv):
+        if arg == "--port" and i + 1 < len(argv):
+            bind_port = int(argv[i + 1])
+        elif arg == "--host" and i + 1 < len(argv):
+            bind_host = argv[i + 1]
 
     if use_http:
+        security = _transport_security(bind_host)
+        if security is None:
+            _log(logging.WARNING, "dns_rebinding_protection_off", host=bind_host,
+                 hint="Set MCP_ALLOWED_HOSTS to the hostnames this server is "
+                      "reachable under so Host and Origin are validated; without "
+                      "it the SDK does not check the Host header at all.")
         _log(logging.INFO, "server_start", transport="streamable-http",
              host=bind_host, port=bind_port)
-        mcp.run(transport="streamable-http", host=bind_host, port=bind_port)
+        mcp.run(transport="streamable-http", host=bind_host, port=bind_port,
+                transport_security=security)
     else:
         _log(logging.INFO, "server_start", transport="stdio")
         mcp.run()
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    main()
