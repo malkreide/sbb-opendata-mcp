@@ -5,6 +5,18 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.3.4] — 2026-07-31
+
+### Geaendert
+
+- **Der User-Agent traegt jetzt eine Version.** Bisher sendete der Server
+  schlicht `sbb-opendata-mcp` — erkennbar, aber ohne Angabe, welcher Stand da
+  anfragt. Damit liess sich ein Problem keiner Release zuordnen. Neu
+  traegt den HTTP-Client `sbb-opendata-mcp/<version> (+github.com/malkreide/sbb-opendata-mcp)`.
+
+  Die Version stammt aus `importlib.metadata` und kann nicht getrennt vom
+  Paket driften.
+
 ### Fixed
 
 - **Der Container band Loopback und war von aussen nicht erreichbar.** Das
