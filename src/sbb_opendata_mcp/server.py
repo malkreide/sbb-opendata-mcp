@@ -21,6 +21,12 @@ from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import CallToolResult, TextContent
 from pydantic import BaseModel, ConfigDict, Field
 
+from . import __version__
+
+# Wer fragt hier an? Ohne eigenen User-Agent geht der httpx-Default
+# hinaus und der Betreiber der Datenquelle sieht bloss eine Bibliothek.
+# Die Version stammt aus den Paket-Metadaten und kann nicht driften.
+USER_AGENT = f"sbb-opendata-mcp/{__version__} (+https://github.com/malkreide/sbb-opendata-mcp)"
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -224,7 +230,7 @@ async def _get_client() -> httpx.AsyncClient:
                 _client = httpx.AsyncClient(
                     timeout=DEFAULT_TIMEOUT,
                     limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
-                    headers={"User-Agent": "sbb-opendata-mcp"},
+                    headers={"User-Agent": USER_AGENT},
                 )
     return _client
 
