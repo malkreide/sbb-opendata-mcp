@@ -355,9 +355,7 @@ class TestBindHost:
         import pathlib
         import re
 
-        dockerfile = (
-            pathlib.Path(__file__).resolve().parents[1] / "Dockerfile"
-        ).read_text()
+        dockerfile = (pathlib.Path(__file__).resolve().parents[1] / "Dockerfile").read_text()
         assert re.search(r"MCP_HOST\s*=\s*0\.0\.0\.0", dockerfile)
 
 

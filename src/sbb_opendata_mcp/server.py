@@ -107,9 +107,7 @@ def configure_logging() -> None:
     if os.environ.get("LOG_FORMAT", "text").lower() == "json":
         handler.setFormatter(_JsonFormatter())
     else:
-        handler.setFormatter(
-            logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s")
-        )
+        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
     logger.addHandler(handler)
     logger.setLevel(os.environ.get("LOG_LEVEL", "INFO").upper())
     logger.propagate = False
@@ -582,7 +580,9 @@ async def sbb_get_passenger_frequency(params: PassengerFrequencyInput) -> CallTo
             return _tool_result(json.dumps(structured, ensure_ascii=False, indent=2), structured)
 
         if not results:
-            return _tool_result("Keine Passagierfrequenzdaten gefunden. Bitte Suchparameter anpassen.", structured)
+            return _tool_result(
+                "Keine Passagierfrequenzdaten gefunden. Bitte Suchparameter anpassen.", structured
+            )
 
         lines = ["## SBB Passagierfrequenz\n"]
         lines.append(f"*Resultate: {pagination['returned']} von {pagination['total_count']}*\n")
@@ -592,7 +592,11 @@ async def sbb_get_passenger_frequency(params: PassengerFrequencyInput) -> CallTo
         for r in results:
             dtv = f"{int(r.get('dtv_tjm_tgm', 0)):,}".replace(",", "'") if r.get("dtv_tjm_tgm") else "–"
             dwv = f"{int(r.get('dwv_tmjo_tfm', 0)):,}".replace(",", "'") if r.get("dwv_tmjo_tfm") else "–"
-            dnwv = f"{int(r.get('dnwv_tmjno_tmgnl', 0)):,}".replace(",", "'") if r.get("dnwv_tmjno_tmgnl") else "–"
+            dnwv = (
+                f"{int(r.get('dnwv_tmjno_tmgnl', 0)):,}".replace(",", "'")
+                if r.get("dnwv_tmjno_tmgnl")
+                else "–"
+            )
             lines.append(
                 f"| {r.get('bahnhof_gare_stazione', '–')} "
                 f"| {r.get('jahr_annee_anno', '–')} "
@@ -749,7 +753,9 @@ async def sbb_get_infrastructure_construction_projects(params: ConstructionProje
             return _tool_result(json.dumps(structured, ensure_ascii=False, indent=2), structured)
 
         if not results:
-            return _tool_result("Keine Infrastruktur-Bauprojekte mit diesen Filterkriterien gefunden.", structured)
+            return _tool_result(
+                "Keine Infrastruktur-Bauprojekte mit diesen Filterkriterien gefunden.", structured
+            )
 
         lines = ["## SBB Infrastruktur-Bauprojekte\n"]
         lines.append(f"*{pagination['returned']} von {pagination['total_count']} Projekten*\n")
@@ -834,7 +840,9 @@ async def sbb_get_real_estate_projects(params: RealEstateProjectsInput) -> CallT
             return _tool_result(json.dumps(structured, ensure_ascii=False, indent=2), structured)
 
         if not results:
-            return _tool_result("Keine Immobilien-Bauprojekte mit diesen Filterkriterien gefunden.", structured)
+            return _tool_result(
+                "Keine Immobilien-Bauprojekte mit diesen Filterkriterien gefunden.", structured
+            )
 
         lines = ["## SBB Immobilien-Bauprojekte\n"]
         lines.append(f"*{pagination['returned']} von {pagination['total_count']} Projekten*\n")
@@ -1197,7 +1205,11 @@ async def sbb_compare_stations(params: CompareStationsInput) -> CallToolResult:
             dtv = f"{int(info['dtv']):,}".replace(",", "'") if info.get("dtv") else "–"
             dwv = f"{int(info['dwv']):,}".replace(",", "'") if info.get("dwv") else "–"
             pc = info.get("platform_count", "–")
-            pl = f"{info.get('total_platform_length_m', '–'):,}".replace(",", "'") if info.get("total_platform_length_m") else "–"
+            pl = (
+                f"{info.get('total_platform_length_m', '–'):,}".replace(",", "'")
+                if info.get("total_platform_length_m")
+                else "–"
+            )
             lines.append(f"| {name} | {canton} | {dtv} | {dwv} | {pc} | {pl} |")
 
         lines.append("\n*Quellen: SBB Passagierfrequenz + Perrondaten | data.sbb.ch*")
@@ -1337,6 +1349,7 @@ async def sbb_list_datasets() -> CallToolResult:
 # Entry point
 # ---------------------------------------------------------------------------
 
+
 def main(argv: list[str] | None = None) -> None:
     """Start the server. Extracted from the ``__main__`` block so the transport
     wiring is testable — the regression this repairs was a missing ``run()``
@@ -1361,14 +1374,16 @@ def main(argv: list[str] | None = None) -> None:
     if use_http:
         security = _transport_security(bind_host)
         if security is None:
-            _log(logging.WARNING, "dns_rebinding_protection_off", host=bind_host,
-                 hint="Set MCP_ALLOWED_HOSTS to the hostnames this server is "
-                      "reachable under so Host and Origin are validated; without "
-                      "it the SDK does not check the Host header at all.")
-        _log(logging.INFO, "server_start", transport="streamable-http",
-             host=bind_host, port=bind_port)
-        mcp.run(transport="streamable-http", host=bind_host, port=bind_port,
-                transport_security=security)
+            _log(
+                logging.WARNING,
+                "dns_rebinding_protection_off",
+                host=bind_host,
+                hint="Set MCP_ALLOWED_HOSTS to the hostnames this server is "
+                "reachable under so Host and Origin are validated; without "
+                "it the SDK does not check the Host header at all.",
+            )
+        _log(logging.INFO, "server_start", transport="streamable-http", host=bind_host, port=bind_port)
+        mcp.run(transport="streamable-http", host=bind_host, port=bind_port, transport_security=security)
     else:
         _log(logging.INFO, "server_start", transport="stdio")
         mcp.run()
