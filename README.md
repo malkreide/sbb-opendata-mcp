@@ -191,7 +191,6 @@ python -m sbb_opendata_mcp.server --http --port 8000
 |------|-------------|-------------|
 | `sbb_get_passenger_frequency` | Boardings/alightings by station and year (daily avg.) | Annual |
 | `sbb_get_rail_disruptions` | Live rail traffic messages | Every 5 min. |
-| `sbb_get_infrastructure_construction_projects` | Infrastructure construction (stations, lines) | Ongoing |
 | `sbb_get_real_estate_projects` | SBB real estate development projects | Daily |
 | `sbb_get_trains_per_segment` | Train counts per route segment (SBB, BLS, SOB …) | Annual |
 | `sbb_get_platform_data` | Platform data (length, type, area) | Ongoing |
@@ -211,7 +210,7 @@ All tools support `response_format: "markdown"` (human-readable) and `"json"`
 | *"How many people boarded at Zürich HB daily in 2024?"* | `sbb_get_passenger_frequency` |
 | *"Are there any current disruptions on the Swiss rail network?"* | `sbb_get_rail_disruptions` |
 | *"Compare Zürich HB, Bern and Basel SBB"* | `sbb_compare_stations` |
-| *"Which SBB construction projects are active in Zürich?"* | `sbb_get_infrastructure_construction_projects` |
+| *"Which SBB real-estate construction projects are running?"* | `sbb_get_real_estate_projects` |
 | *"How many trains run yearly on the Zürich–Winterthur route?"* | `sbb_get_trains_per_segment` |
 | *"Which stops exist in Wädenswil?"* | `sbb_search_stations` |
 
@@ -226,7 +225,7 @@ All tools support `response_format: "markdown"` (human-readable) and `"json"`
 │   Claude / AI   │────▶│   SBB Open Data MCP       │────▶│       data.sbb.ch        │
 │   (MCP Host)    │◀────│   (MCP Server)            │◀────│                          │
 └─────────────────┘     │                           │     │  OpenDataSoft REST v2.1  │
-                        │  10 Tools                 │     │  (public, no API key)    │
+                        │  9 Tools                  │     │  (public, no API key)    │
                         │  Stdio | Streamable HTTP  │     │                          │
                         │                           │     │  passagierfrequenz       │
                         │  Shared httpx client      │     │  rail-traffic-information │
@@ -267,7 +266,7 @@ sbb-opendata-mcp/
 
 ## Safety & Limits
 
-- **Read-only:** All 10 tools perform read-only HTTP GET requests — no data is written, modified, or deleted upstream.
+- **Read-only:** All 9 tools perform read-only HTTP GET requests — no data is written, modified, or deleted upstream.
 - **No personal data:** Queries are transient and not stored. The portal returns aggregated statistics, infrastructure and operational metadata. No PII is processed or retained.
 - **No API key:** Data is public and free. There is no authentication and no secret to manage.
 - **Injection-hardened:** `year`/`canton` are regex-validated and every value interpolated into an ODSQL `where` clause is escaped via a central helper.
@@ -299,7 +298,26 @@ PYTHONPATH=src pytest tests/ -m "not live"
 
 # Live API smoke tests (require network access to data.sbb.ch)
 PYTHONPATH=src pytest tests/ -m live
+
+# Re-record the fixtures from data.sbb.ch (writes tests/fixtures/PROVENANCE.md)
+python scripts/record_fixtures.py
 ```
+
+The unit-test payloads are **recorded, not invented**. Source, retrieval date,
+selection rule and SHA-256 per file are in
+[`tests/fixtures/PROVENANCE.md`](tests/fixtures/PROVENANCE.md).
+
+`tests/fixtures/dataset_fields.json` is not a data excerpt but **the contract**:
+the Explore v2.1 API declares each dataset's field names, and a `select` or
+`order_by` on a field it does not have is answered with **HTTP 400** — not with
+fewer columns. `TestFieldContract` holds every field name the server uses
+against that declaration, so the next rename fails a test instead of a user's
+request. Until 2026-08-08 three of ten tools were permanently broken for
+exactly this reason.
+
+> **Live tests are not run by CI** (`-m "not live"`). Two of those three broken
+> tools *had* live tests covering them — `test_live_search_waedenswil` and
+> `test_live_list_datasets`. The coverage existed; the run did not.
 
 ---
 

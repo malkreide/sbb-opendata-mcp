@@ -121,9 +121,14 @@ def _log(level: int, msg: str, **fields: Any) -> None:
 configure_logging()
 
 # Dataset IDs
+#
+# Am 2026-08-08 gegen den Katalog gehalten (61 Datensaetze). Zwei IDs, die hier
+# standen, gibt es nicht mehr und auch nicht unter neuem Namen:
+# `construction-projects` (Infrastruktur-Bauprojekte) und `aufzugsstammdaten`.
+# Die erste trug ein Werkzeug, das damit fuer jede Anfrage HTTP 404 lieferte;
+# die zweite war eine unbenutzte Konstante. Beide sind entfernt.
 DATASET_PASSENGER_FREQUENCY = "passagierfrequenz"
 DATASET_RAIL_TRAFFIC = "rail-traffic-information"
-DATASET_CONSTRUCTION_INFRA = "construction-projects"
 DATASET_CONSTRUCTION_REALESTATE = "bauprojekte-immobilien"
 DATASET_TRAINS_PER_SEGMENT = "zugzahlen"
 DATASET_TRAINS_PER_MONTH = "zugzahlen_pro_monat"
@@ -131,8 +136,76 @@ DATASET_PLATFORMS = "perron"
 DATASET_ROLLING_STOCK = "rollmaterial"
 DATASET_STATION_USERS = "anzahl-sbb-bahnhofbenutzer"
 DATASET_STATIONS = "dienststellen-gemass-opentransportdataswiss"
-DATASET_ELEVATORS = "aufzugsstammdaten"
 DATASET_LINES = "linie"
+
+# ---------------------------------------------------------------------------
+# Feldnamen — benannt, damit ein Test sie gegen die Quelle halten kann
+# ---------------------------------------------------------------------------
+#
+# Die Explore-v2.1-API deklariert je Datensatz unter `/datasets/<id>`, welche
+# Felder es gibt (`fields[].name`). Ein `select` oder `order_by` auf ein Feld,
+# das dort nicht steht, beantwortet sie mit HTTP 400 — nicht mit weniger
+# Spalten. Der Nutzer sieht davon «API-Anfrage fehlgeschlagen».
+#
+# Genau das war der Fall, und zwar dauerhaft: Die Haltestellensuche waehlte
+# sieben deutsche Feldnamen (`bezeichnung_offiziell`, `uic`, `kanton_kuerzel`,
+# `dst_nr`, `tu_nummer`, `geopos_ost`, `geopos_nord`) aus einem Datensatz, der
+# ausschliesslich englische fuehrt — **keiner der sieben existiert**. Die
+# Katalogliste sortierte nach `metas.default.title`, das es ebenfalls nicht
+# gibt.
+#
+# Die Namen stehen deshalb hier und nicht als Literale im Werkzeug: So haelt
+# `tests/test_server.py` jeden einzelnen gegen die aufgezeichnete Deklaration,
+# und die naechste Umbenennung faellt als Testfehler auf statt als HTTP 400 vor
+# einem Nutzer.
+FIELDS_STATIONS = (
+    "designationofficial",  # war: bezeichnung_offiziell
+    "number",  # war: uic — die volle UIC-/DIDOK-Nummer, z.B. 8510279
+    "numbershort",  # war: dst_nr — die Dienststellennummer, z.B. 10279
+    "cantonabbreviation",  # war: kanton_kuerzel
+    "businessorganisationnumber",  # war: tu_nummer
+    "businessorganisationdescriptionde",
+    "geopos",  # war: geopos_ost/geopos_nord — die Quelle fuehrt EIN Objekt
+    "validfrom",
+    "validto",
+)
+
+FIELDS_TRAINS_PER_SEGMENT = (
+    "strecke_bezeichnung",
+    "isb",
+    "jahr",
+    "geschaeftscode",
+    "anzahl_zuege",
+    "trassenkilometer",
+    "bp_von_abschnitt_bezeichnung",
+    "bp_bis_abschnitt_bezeichnung",
+)
+
+FIELDS_ROLLING_STOCK = (
+    "fahrzeug_typ",
+    "objekt",
+    "baudatum_fahrzeug",
+    "sitzplatze_1_kl_total_zug",
+    "sitzplatze_2_kl_total_zug",
+    "sitzplatze_pro_zug_total",
+    "lange_uber_zug",
+    "eigengewicht_tara",
+)
+
+# Sortierschluessel je Werkzeug — aus demselben Grund benannt.
+ORDER_BY_PASSENGER_FREQUENCY = "jahr_annee_anno desc"
+ORDER_BY_RAIL_TRAFFIC = "published desc"
+ORDER_BY_TRAINS_PER_SEGMENT = "anzahl_zuege desc"
+ORDER_BY_PLATFORMS = "bps_name"
+ORDER_BY_COMPARE_STATIONS = "dtv_tjm_tgm desc"
+# Der Katalog-Endpunkt ist ein anderer Gegenstand als ein Datensatz: Er kennt
+# `title`, aber kein `metas.default.title`.
+ORDER_BY_CATALOG = "title asc"
+
+# Die DiDok-Liste schreibt «unbefristet gueltig» als Datum: 9999-12-31. Ein
+# Fuellwert, der wie eine Angabe aussieht — dieselbe Form, die in
+# `swiss-democracy-mcp` als Parteiparole hinausging.
+UNLIMITED_VALIDITY = "9999-12-31"
 
 # ---------------------------------------------------------------------------
 # Server init
@@ -395,22 +468,6 @@ class RailDisruptionsInput(BaseModel):
     )
 
 
-class ConstructionProjectsInput(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
-
-    city: str | None = Field(
-        default=None,
-        description="Stadt/Ort filtern, z.B. 'Zürich', 'Basel', 'Bern'",
-    )
-    project_type: str | None = Field(
-        default=None,
-        description="Projektart filtern: 'ausbau', 'bahnhof', 'strecke', etc.",
-    )
-    limit: int = Field(default=20, ge=1, le=100)
-    offset: int = Field(default=0, ge=0)
-    response_format: ResponseFormat = Field(default=ResponseFormat.MARKDOWN)
-
-
 class RealEstateProjectsInput(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
@@ -566,7 +623,7 @@ async def sbb_get_passenger_frequency(params: PassengerFrequencyInput) -> CallTo
         data = await _fetch_records(
             DATASET_PASSENGER_FREQUENCY,
             where=where,
-            order_by="jahr_annee_anno desc",
+            order_by=ORDER_BY_PASSENGER_FREQUENCY,
             limit=params.limit,
             offset=params.offset,
         )
@@ -648,7 +705,7 @@ async def sbb_get_rail_disruptions(params: RailDisruptionsInput) -> CallToolResu
     try:
         data = await _fetch_records(
             DATASET_RAIL_TRAFFIC,
-            order_by="published desc",
+            order_by=ORDER_BY_RAIL_TRAFFIC,
             limit=params.limit,
             offset=params.offset,
         )
@@ -691,94 +748,6 @@ async def sbb_get_rail_disruptions(params: RailDisruptionsInput) -> CallToolResu
 
         if pagination["has_more"]:
             lines.append(f"*Weitere Meldungen verfügbar. Nächster Offset: {pagination['next_offset']}*")
-
-        return _tool_result("\n".join(lines), structured)
-
-    except Exception as e:
-        return _err(e)
-
-
-@mcp.tool(
-    name="sbb_get_infrastructure_construction_projects",
-    annotations={
-        "title": "SBB Infrastruktur-Bauprojekte",
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": True,
-    },
-    structured_output=False,
-)
-async def sbb_get_infrastructure_construction_projects(params: ConstructionProjectsInput) -> CallToolResult:
-    """Ruft laufende SBB-Infrastruktur-Bauprojekte (Bahnhöfe, Strecken, Ausbau) ab.
-
-    Enthält Projektname, Ort, Projektart, Angebotsschritt und Links zu Projektseiten.
-    Geeignet für Stadtplanung, Kommunikation und Raumplanung.
-
-    Args:
-        params (ConstructionProjectsInput): Parameter:
-            - city (Optional[str]): Ortsfilter, z.B. 'Zürich', 'Basel'
-            - project_type (Optional[str]): Projektart, z.B. 'ausbau'
-            - limit (int): Max. Resultate
-            - offset (int): Paginierung
-            - response_format (str): 'markdown' oder 'json'
-
-    Returns:
-        str: Liste Infrastruktur-Bauprojekte mit Ort, Art und Projektlinks.
-             Schema: {name, location, type, category, link}
-    """
-    try:
-        conditions = []
-        if params.city:
-            escaped = _odsql_quote(params.city)
-            conditions.append(f'projektort like "%{escaped}%"')
-        if params.project_type:
-            escaped = _odsql_quote(params.project_type)
-            conditions.append(f'art like "%{escaped}%"')
-
-        where = " AND ".join(conditions) if conditions else None
-        data = await _fetch_records(
-            DATASET_CONSTRUCTION_INFRA,
-            where=where,
-            limit=params.limit,
-            offset=params.offset,
-        )
-
-        results = data.get("results", [])
-        total = data.get("total_count", 0)
-        pagination = _pagination_meta(total, params.limit, params.offset)
-
-        structured = {"pagination": pagination, "results": results}
-        if params.response_format == ResponseFormat.JSON:
-            return _tool_result(json.dumps(structured, ensure_ascii=False, indent=2), structured)
-
-        if not results:
-            return _tool_result(
-                "Keine Infrastruktur-Bauprojekte mit diesen Filterkriterien gefunden.", structured
-            )
-
-        lines = ["## SBB Infrastruktur-Bauprojekte\n"]
-        lines.append(f"*{pagination['returned']} von {pagination['total_count']} Projekten*\n")
-
-        for r in results:
-            name = r.get("projektname", "Unbekannt")
-            ort = r.get("projektort", "–")
-            art = r.get("art", "–")
-            ort_typ = r.get("ort", "–")
-            link = r.get("link1_url", "")
-            angebotsschritt = r.get("angebotsschritt", "")
-
-            lines.append(f"### 🏗️ {name}")
-            lines.append(f"- **Ort:** {ort}")
-            lines.append(f"- **Projekttyp:** {art} / {ort_typ}")
-            if angebotsschritt:
-                lines.append(f"- **Angebotsschritt:** {angebotsschritt}")
-            if link:
-                lines.append(f"- **Mehr Info:** [{r.get('link1_title', 'Projektseite')}]({link})")
-            lines.append("")
-
-        if pagination["has_more"]:
-            lines.append(f"*Weitere Projekte verfügbar. Nächster Offset: {pagination['next_offset']}*")
 
         return _tool_result("\n".join(lines), structured)
 
@@ -923,10 +892,10 @@ async def sbb_get_trains_per_segment(params: TrainsPerSegmentInput) -> CallToolR
         data = await _fetch_records(
             DATASET_TRAINS_PER_SEGMENT,
             where=where,
-            order_by="anzahl_zuege desc",
+            order_by=ORDER_BY_TRAINS_PER_SEGMENT,
             limit=params.limit,
             offset=params.offset,
-            select="strecke_bezeichnung,isb,jahr,geschaeftscode,anzahl_zuege,trassenkilometer,bp_von_abschnitt_bezeichnung,bp_bis_abschnitt_bezeichnung",
+            select=",".join(FIELDS_TRAINS_PER_SEGMENT),
         )
 
         results = data.get("results", [])
@@ -1006,7 +975,7 @@ async def sbb_get_platform_data(params: PlatformDataInput) -> CallToolResult:
         data = await _fetch_records(
             DATASET_PLATFORMS,
             where=where,
-            order_by="bps_name",
+            order_by=ORDER_BY_PLATFORMS,
             limit=params.limit,
             offset=params.offset,
         )
@@ -1084,7 +1053,7 @@ async def sbb_get_rolling_stock(params: RollingStockInput) -> CallToolResult:
             where=where,
             limit=params.limit,
             offset=params.offset,
-            select="fahrzeug_typ,objekt,baudatum_fahrzeug,sitzplatze_1_kl_total_zug,sitzplatze_2_kl_total_zug,sitzplatze_pro_zug_total,lange_uber_zug,eigengewicht_tara",
+            select=",".join(FIELDS_ROLLING_STOCK),
         )
 
         results = data.get("results", [])
@@ -1160,7 +1129,7 @@ async def sbb_compare_stations(params: CompareStationsInput) -> CallToolResult:
             freq = await _fetch_records(
                 DATASET_PASSENGER_FREQUENCY,
                 where=f'bahnhof_gare_stazione like "%{escaped}%" AND year(jahr_annee_anno)={year_filter}',
-                order_by="dtv_tjm_tgm desc",
+                order_by=ORDER_BY_COMPARE_STATIONS,
                 limit=1,
             )
             if freq.get("results"):
@@ -1249,9 +1218,9 @@ async def sbb_search_stations(params: StationSearchInput) -> CallToolResult:
     """
     try:
         escaped = _odsql_quote(params.query)
-        conditions = [f'bezeichnung_offiziell like "%{escaped}%"']
+        conditions = [f'designationofficial like "%{escaped}%"']
         if params.canton:
-            conditions.append(f'kanton_kuerzel="{params.canton.upper()}"')
+            conditions.append(f'cantonabbreviation="{params.canton.upper()}"')
 
         where = " AND ".join(conditions)
         data = await _fetch_records(
@@ -1259,7 +1228,7 @@ async def sbb_search_stations(params: StationSearchInput) -> CallToolResult:
             where=where,
             limit=params.limit,
             offset=0,
-            select="bezeichnung_offiziell,uic,kanton_kuerzel,dst_nr,tu_nummer,geopos_ost,geopos_nord",
+            select=",".join(FIELDS_STATIONS),
         )
 
         results = data.get("results", [])
@@ -1274,14 +1243,21 @@ async def sbb_search_stations(params: StationSearchInput) -> CallToolResult:
 
         lines = [f"## Haltestellen: '{params.query}'\n"]
         lines.append(f"*{len(results)} von {total} Resultaten*\n")
-        lines.append("| Bezeichnung | UIC | Kanton |")
-        lines.append("|-------------|-----|--------|")
+        lines.append("| Bezeichnung | UIC | Kanton | Betreiber | gültig bis |")
+        lines.append("|-------------|-----|--------|-----------|------------|")
 
         for r in results:
-            name = r.get("bezeichnung_offiziell", "–")
-            uic = r.get("uic", "–")
-            kt = r.get("kanton_kuerzel", "–")
-            lines.append(f"| {name} | {uic} | {kt} |")
+            name = r.get("designationofficial", "–")
+            uic = r.get("number", "–")
+            kt = r.get("cantonabbreviation", "–")
+            op = r.get("businessorganisationdescriptionde") or "–"
+            # Die Quelle schreibt «unbefristet» als 9999-12-31. Ein Datum, das
+            # als Datum aussieht und keines ist, gehoert nicht ungefiltert in
+            # eine Tabelle — gemessen am 2026-08-08 tragen 59'515 von 59'530
+            # Eintraegen genau diesen Wert.
+            valid_to = r.get("validto")
+            valid = "unbefristet" if valid_to == UNLIMITED_VALIDITY else (valid_to or "–")
+            lines.append(f"| {name} | {uic} | {kt} | {op} | {valid} |")
 
         if total > params.limit:
             lines.append(f"\n*{total - params.limit} weitere Resultate – Suchbegriff präzisieren.*")
@@ -1315,7 +1291,7 @@ async def sbb_list_datasets() -> CallToolResult:
     """
     try:
         url = "https://data.sbb.ch/api/explore/v2.1/catalog/datasets"
-        params = {"limit": 100, "order_by": "metas.default.title asc"}
+        params = {"limit": 100, "order_by": ORDER_BY_CATALOG}
 
         client = await _get_client()
         r = await client.get(url, params=params)

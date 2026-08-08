@@ -1,6 +1,16 @@
 """
 Tests für den SBB Open Data MCP Server.
 Drei Kategorien: Unit-Tests (Mock), Integration-Tests (Live API), Smoke-Tests.
+
+Die Antworten der Datensätze, an denen die Befunde vom 2026-08-08 hängen, sind
+**aufgezeichnet, nicht ausgedacht**: Quelle, Datum, Auswahlregel und SHA-256 je
+Datei stehen in `tests/fixtures/PROVENANCE.md`, neu aufzeichnen mit
+`python scripts/record_fixtures.py`.
+
+Der wichtigste Test dieser Datei ist `test_every_field_the_server_uses_exists`.
+Die Explore-API beantwortet ein unbekanntes Feld in `select` oder `order_by`
+mit **HTTP 400**, nicht mit weniger Spalten — drei von zehn Werkzeugen waren
+deshalb dauerhaft kaputt, ohne dass ein Test es gemerkt hätte.
 """
 
 import json
@@ -17,7 +27,6 @@ import httpx
 
 from sbb_opendata_mcp.server import (
     CompareStationsInput,
-    ConstructionProjectsInput,
     PassengerFrequencyInput,
     PlatformDataInput,
     RailDisruptionsInput,
@@ -30,7 +39,6 @@ from sbb_opendata_mcp.server import (
     _pagination_meta,
     _to_number,
     sbb_compare_stations,
-    sbb_get_infrastructure_construction_projects,
     sbb_get_passenger_frequency,
     sbb_get_platform_data,
     sbb_get_rail_disruptions,
@@ -40,6 +48,35 @@ from sbb_opendata_mcp.server import (
     sbb_list_datasets,
     sbb_search_stations,
 )
+
+# `tests/` ist ein Paket (`__init__.py`), also legt pytest das Repo-Wurzel-
+# verzeichnis auf den Pfad und nicht `tests/` selbst. Der Import muss
+# deshalb ueber das Paket laufen — sonst faellt die Sammlung unter dem
+# CI-Kommando `PYTHONPATH=src pytest tests/`, waehrend sie lokal mit einem
+# grosszuegigeren PYTHONPATH durchgeht.
+from tests.fixture_data import declared_fields, payload, records
+
+
+@pytest.fixture(autouse=True)
+def _fresh_shared_client():
+    """Jeder Test bekommt einen httpx-Client auf seinem eigenen Event-Loop.
+
+    Der Server hält einen prozessweiten Client. `pytest-asyncio` gibt jedem
+    Test einen eigenen Loop, und ein Client, der auf einem inzwischen
+    geschlossenen Loop entstanden ist, meldet beim nächsten Zugriff
+    `RuntimeError: Event loop is closed` — je nach Testreihenfolge.
+
+    Das ist kein Schönheitsfehler: Die Live-Suite hat dadurch je nach
+    Reihenfolge unterschiedliche Ergebnisse geliefert, und ein Testlauf, dessen
+    Ausgang von der Reihenfolge abhängt, wird nach dem zweiten Fehlalarm nicht
+    mehr gelesen. Genau diese Tests hätten zwei der drei Befunde gefunden.
+    """
+    import sbb_opendata_mcp.server as _srv
+
+    _srv._client = None
+    yield
+    _srv._client = None
+
 
 # ---------------------------------------------------------------------------
 # Helpers & fixtures
@@ -51,39 +88,12 @@ def _text(r):
     return r.content[0].text if hasattr(r, "content") else r
 
 
-MOCK_PASSENGER_RECORD = {
-    "bahnhof_gare_stazione": "Zürich HB",
-    "kt_ct_cantone": "ZH",
-    "isb_gi": "SBB",
-    "jahr_annee_anno": "2024",
-    "dtv_tjm_tgm": 410700.0,
-    "dwv_tmjo_tfm": 438300.0,
-    "dnwv_tmjno_tmgnl": 349500.0,
-    "evu_ef_itf": "SBB, SOB, Thurbo",
-    "bemerkungen": "Umfasst auch ZLOE und ZMUS. Ohne SZU.",
-    "geopos": {"lon": 8.540212, "lat": 47.378176},
-}
-
-MOCK_DISRUPTION_RECORD = {
-    "title": "Unterbruch: Zürich HB – Winterthur",
-    "description": "Streckensperrung wegen Infrastrukturschaden.",
-    "published": "2026-03-08T10:00:00+00:00",
-    "startdatetime": "2026-03-08T09:30:00+00:00",
-    "enddatetime": "2026-03-08T14:00:00+00:00",
-    "link": "https://www.sbb.ch/de/travel-information/rail-traffic-information.html",
-    "type": "2",
-    "author": "SBB",
-}
-
-MOCK_CONSTRUCTION_RECORD = {
-    "projektname": "Barrierefreier Bahnzugang Zürich Stadelhofen",
-    "projektort": "Zürich",
-    "art": "ausbau",
-    "ort": "bahnhof",
-    "link1_title": "Webseite",
-    "link1_url": "https://company.sbb.ch/de/ueber-die-sbb/projekte/projekte-zuerich.html",
-    "angebotsschritt": "Ausbauschritt 2035",
-}
+# Aufgezeichnet, nicht ausgedacht — siehe tests/fixtures/PROVENANCE.md.
+MOCK_PASSENGER_RECORD = records("passenger_frequency.json")[0]
+MOCK_DISRUPTION_RECORD = records("rail_disruptions.json")[0]
+STATIONS_SEARCH = payload("stations_search.json")
+STATIONS_EXPIRED = payload("stations_expired.json")
+CATALOG = payload("catalog.json")
 
 MOCK_PLATFORM_RECORD = {
     "bps_name": "Zürich HB",
@@ -551,7 +561,7 @@ class TestSharedClient:
             result = await sbb_compare_stations(
                 CompareStationsInput(stations=["Zürich HB", "Bern", "Basel SBB"], year="2024")
             )
-        assert "Zürich HB" in _text(result) or "Bern" in _text(result)
+        assert MOCK_PASSENGER_RECORD["bahnhof_gare_stazione"] in _text(result)
         # 3 stations running concurrently → peak well above 1.
         assert peak >= 3
 
@@ -572,7 +582,7 @@ class TestPassengerFrequencyTool:
             result = await sbb_get_passenger_frequency(
                 PassengerFrequencyInput(station_name="Zürich HB", year="2024")
             )
-        assert "Zürich HB" in _text(result)
+        assert MOCK_PASSENGER_RECORD["bahnhof_gare_stazione"] in _text(result)
         assert "410" in _text(result) or "DTV" in _text(result) or "Passagier" in _text(result)
 
     @pytest.mark.asyncio
@@ -588,7 +598,7 @@ class TestPassengerFrequencyTool:
         parsed = json.loads(_text(result))
         assert "results" in parsed
         assert "pagination" in parsed
-        assert parsed["results"][0]["bahnhof_gare_stazione"] == "Zürich HB"
+        assert parsed["results"][0]["bahnhof_gare_stazione"] == MOCK_PASSENGER_RECORD["bahnhof_gare_stazione"]
 
     @pytest.mark.asyncio
     async def test_empty_results(self):
@@ -626,7 +636,7 @@ class TestRailDisruptionsTool:
             return_value=mock_api_response([MOCK_DISRUPTION_RECORD]),
         ):
             result = await sbb_get_rail_disruptions(RailDisruptionsInput())
-        assert "Unterbruch" in _text(result) or "Zürich" in _text(result)
+        assert MOCK_DISRUPTION_RECORD["title"][:20] in _text(result)
 
     @pytest.mark.asyncio
     async def test_json_output(self):
@@ -650,33 +660,6 @@ class TestRailDisruptionsTool:
         assert "keine" in _text(result).lower()
 
 
-class TestConstructionProjectsTool:
-    @pytest.mark.asyncio
-    async def test_markdown_output(self):
-        with patch(
-            "sbb_opendata_mcp.server._fetch_records",
-            new_callable=AsyncMock,
-            return_value=mock_api_response([MOCK_CONSTRUCTION_RECORD]),
-        ):
-            result = await sbb_get_infrastructure_construction_projects(
-                ConstructionProjectsInput(city="Zürich")
-            )
-        assert "Zürich" in _text(result) or "Bahnzugang" in _text(result)
-
-    @pytest.mark.asyncio
-    async def test_json_output(self):
-        with patch(
-            "sbb_opendata_mcp.server._fetch_records",
-            new_callable=AsyncMock,
-            return_value=mock_api_response([MOCK_CONSTRUCTION_RECORD]),
-        ):
-            result = await sbb_get_infrastructure_construction_projects(
-                ConstructionProjectsInput(response_format="json")
-            )
-        parsed = json.loads(_text(result))
-        assert "results" in parsed
-
-
 class TestPlatformDataTool:
     @pytest.mark.asyncio
     async def test_markdown_output(self):
@@ -686,7 +669,7 @@ class TestPlatformDataTool:
             return_value=mock_api_response([MOCK_PLATFORM_RECORD]),
         ):
             result = await sbb_get_platform_data(PlatformDataInput(station_name="Zürich HB"))
-        assert "Zürich HB" in _text(result)
+        assert MOCK_PLATFORM_RECORD["bps_name"] in _text(result)
         assert "420" in _text(result) or "Mittelperron" in _text(result)
 
     @pytest.mark.asyncio
@@ -765,26 +748,27 @@ class TestCompareStationsTool:
             result = await sbb_compare_stations(
                 CompareStationsInput(stations=["Zürich HB", "Bern"], year="2024")
             )
-        assert "Zürich HB" in _text(result) or "Bern" in _text(result)
+        assert MOCK_PASSENGER_RECORD["bahnhof_gare_stazione"] in _text(result)
         assert "2024" in _text(result)
 
 
 class TestStationSearchTool:
     @pytest.mark.asyncio
     async def test_search_returns_results(self):
-        mock_station = {
-            "bezeichnung_offiziell": "Wädenswil",
-            "uic": 8503353,
-            "kanton_kuerzel": "ZH",
-        }
         with patch(
             "sbb_opendata_mcp.server._fetch_records",
             new_callable=AsyncMock,
-            return_value=mock_api_response([mock_station]),
+            return_value=STATIONS_SEARCH,
         ):
             result = await sbb_search_stations(StationSearchInput(query="Wädenswil"))
-        assert "Wädenswil" in _text(result)
-        assert "ZH" in _text(result)
+        first = STATIONS_SEARCH["results"][0]
+        # Aus der Fixture abgeleitet. Die erfundene Vorgaengerin trug die drei
+        # deutschen Feldnamen, die es in diesem Datensatz nicht gibt — mit ihr
+        # bestand der Test, waehrend jede echte Anfrage HTTP 400 lieferte.
+        assert first["designationofficial"] in _text(result)
+        assert str(first["number"]) in _text(result)
+        assert first["cantonabbreviation"] in _text(result)
+        assert first["businessorganisationdescriptionde"] in _text(result)
 
     @pytest.mark.asyncio
     async def test_no_results(self):
@@ -869,7 +853,10 @@ class TestStructuredOutput:
         assert isinstance(result, CallToolResult)
         assert "## SBB Passagierfrequenz" in result.content[0].text
         # ... and the underlying records are exposed as structured content.
-        assert result.structured_content["results"][0]["bahnhof_gare_stazione"] == "Zürich HB"
+        assert (
+            result.structured_content["results"][0]["bahnhof_gare_stazione"]
+            == MOCK_PASSENGER_RECORD["bahnhof_gare_stazione"]
+        )
         assert "pagination" in result.structured_content
 
     @pytest.mark.asyncio
@@ -941,3 +928,138 @@ async def test_live_search_waedenswil():
     """Live-Test: Haltestellensuche Wädenswil."""
     result = await sbb_search_stations(StationSearchInput(query="Wädenswil", canton="ZH"))
     assert "Wädenswil" in _text(result)
+
+
+# ---------------------------------------------------------------------------
+# Der Vertrag: jedes Feld, das der Server verwendet, muss die Quelle führen
+# ---------------------------------------------------------------------------
+
+
+class TestFieldContract:
+    """Warum es diese Klasse gibt.
+
+    Die Explore-v2.1-API beantwortet ein unbekanntes Feld in `select` oder
+    `order_by` mit **HTTP 400** — nicht mit weniger Spalten. Ein Feldname, der
+    nicht mehr stimmt, fällt deshalb nicht als Lücke auf, sondern als Ausfall,
+    und der Nutzer liest «API-Anfrage fehlgeschlagen».
+
+    Genau das war der Zustand: Die Haltestellensuche wählte sieben **deutsche**
+    Feldnamen aus einem Datensatz, der ausschliesslich **englische** führt —
+    keiner der sieben existierte, und jede Suche scheiterte. Die Katalogliste
+    sortierte nach `metas.default.title`, das der Katalog-Endpunkt nicht kennt.
+    Beides seit jeher, beides von keinem Test bemerkt, weil die erfundenen
+    Payloads die erfundenen Namen trugen.
+
+    Die Quelle deklariert ihre Felder selbst (`fields[].name` unter
+    `/datasets/<id>`). Diese Deklaration ist aufgezeichnet, und hier wird jeder
+    Feldname des Servers dagegen gehalten.
+    """
+
+    def test_every_field_the_server_uses_exists(self):
+        from sbb_opendata_mcp.server import (
+            DATASET_PASSENGER_FREQUENCY,
+            DATASET_PLATFORMS,
+            DATASET_RAIL_TRAFFIC,
+            DATASET_STATIONS,
+            DATASET_TRAINS_PER_SEGMENT,
+            FIELDS_STATIONS,
+            FIELDS_TRAINS_PER_SEGMENT,
+            ORDER_BY_COMPARE_STATIONS,
+            ORDER_BY_PASSENGER_FREQUENCY,
+            ORDER_BY_PLATFORMS,
+            ORDER_BY_RAIL_TRAFFIC,
+            ORDER_BY_TRAINS_PER_SEGMENT,
+        )
+
+        # (Datensatz, verwendete Feldnamen) — Sortierschlüssel ohne asc/desc.
+        used: list[tuple[str, tuple[str, ...]]] = [
+            (DATASET_STATIONS, FIELDS_STATIONS),
+            (DATASET_STATIONS, ("designationofficial", "cantonabbreviation", "validto")),
+            (DATASET_TRAINS_PER_SEGMENT, FIELDS_TRAINS_PER_SEGMENT),
+            (DATASET_TRAINS_PER_SEGMENT, (ORDER_BY_TRAINS_PER_SEGMENT.split()[0],)),
+            (DATASET_PASSENGER_FREQUENCY, (ORDER_BY_PASSENGER_FREQUENCY.split()[0],)),
+            (DATASET_PASSENGER_FREQUENCY, (ORDER_BY_COMPARE_STATIONS.split()[0],)),
+            (DATASET_RAIL_TRAFFIC, (ORDER_BY_RAIL_TRAFFIC.split()[0],)),
+            (DATASET_PLATFORMS, (ORDER_BY_PLATFORMS.split()[0],)),
+        ]
+
+        problems: list[str] = []
+        for dataset, fields in used:
+            available = declared_fields(dataset)
+            for f in fields:
+                if f not in available:
+                    problems.append(f"{dataset}: '{f}' gibt es nicht")
+        assert not problems, (
+            "Feldnamen, die die Quelle nicht führt — die API antwortet darauf "
+            "mit HTTP 400:\n  " + "\n  ".join(problems)
+        )
+
+    def test_the_german_field_names_really_are_gone(self):
+        """Die Gegenprobe zum Befund, als Zusicherung.
+
+        Ohne diesen Test bestünde der obige auch dann, wenn jemand die
+        Felddeklaration versehentlich vom falschen Datensatz aufzeichnet.
+        """
+        from sbb_opendata_mcp.server import DATASET_STATIONS
+
+        available = declared_fields(DATASET_STATIONS)
+        for gone in (
+            "bezeichnung_offiziell",
+            "uic",
+            "kanton_kuerzel",
+            "dst_nr",
+            "tu_nummer",
+            "geopos_ost",
+            "geopos_nord",
+        ):
+            assert gone not in available, (
+                f"'{gone}' gibt es im DiDok-Datensatz wieder — dann ist der "
+                "Befund vom 2026-08-08 überholt und diese Datei gehört geprüft."
+            )
+
+    def test_the_catalog_sort_key_is_not_a_dataset_field(self):
+        """`metas.default.title` war der Sortierschlüssel und existiert nicht."""
+        from sbb_opendata_mcp.server import ORDER_BY_CATALOG
+
+        assert ORDER_BY_CATALOG.split()[0] == "title"
+        assert "metas" not in ORDER_BY_CATALOG
+
+
+class TestStationValidity:
+    """Ein Füllwert, der wie ein Datum aussieht.
+
+    Die DiDok-Liste schreibt «unbefristet gültig» als `9999-12-31`. Gemessen am
+    2026-08-08 tragen 59'515 von 59'530 Einträgen genau diesen Wert — dieselbe
+    Form, die in `swiss-democracy-mcp` als Parteiparole hinausging.
+    """
+
+    @pytest.mark.asyncio
+    async def test_the_sentinel_is_not_printed_as_a_date(self):
+        with patch(
+            "sbb_opendata_mcp.server._fetch_records",
+            new_callable=AsyncMock,
+            return_value=STATIONS_SEARCH,
+        ):
+            result = await sbb_search_stations(StationSearchInput(query="Wädenswil"))
+        assert any(r["validto"] == "9999-12-31" for r in STATIONS_SEARCH["results"]), (
+            "Fixture ohne Füllwert — dann prüft dieser Test nichts"
+        )
+        assert "9999-12-31" not in _text(result)
+        assert "unbefristet" in _text(result)
+
+    @pytest.mark.asyncio
+    async def test_a_real_expiry_date_survives(self):
+        """Die Gegenprobe: ein echtes Ablaufdatum darf nicht verschwinden.
+
+        Nur 15 von 59'530 Einträgen tragen eines. «Die ersten N» hätten keinen
+        davon getroffen; die Fixture ist deshalb nach Merkmal ausgewählt.
+        """
+        expired = [r for r in STATIONS_EXPIRED["results"] if r["validto"] != "9999-12-31"]
+        assert expired, "Fixture ohne echtes Ablaufdatum — Auswahlregel prüfen"
+        with patch(
+            "sbb_opendata_mcp.server._fetch_records",
+            new_callable=AsyncMock,
+            return_value=STATIONS_EXPIRED,
+        ):
+            result = await sbb_search_stations(StationSearchInput(query="Bahnhof"))
+        assert expired[0]["validto"] in _text(result)

@@ -1,0 +1,285 @@
+{
+  "total_count": 54,
+  "results": [
+    {
+      "designationofficial": "Wädenswil",
+      "number": 8503206,
+      "numbershort": 3206,
+      "cantonabbreviation": "ZH",
+      "businessorganisationnumber": 11,
+      "businessorganisationdescriptionde": "Schweizerische Bundesbahnen SBB",
+      "geopos": {
+        "lon": 8.675216270989166,
+        "lat": 47.22930727741808
+      },
+      "validfrom": "2021-04-01",
+      "validto": "9999-12-31"
+    },
+    {
+      "designationofficial": "Wädenswil, Winterberg",
+      "number": 8503866,
+      "numbershort": 3866,
+      "cantonabbreviation": "ZH",
+      "businessorganisationnumber": 807,
+      "businessorganisationdescriptionde": "Automobildienst SZU",
+      "geopos": {
+        "lon": 8.646059393072395,
+        "lat": 47.23689716487155
+      },
+      "validfrom": "2021-04-01",
+      "validto": "9999-12-31"
+    },
+    {
+      "designationofficial": "Wädenswil, Gisenrüti",
+      "number": 8503868,
+      "numbershort": 3868,
+      "cantonabbreviation": "ZH",
+      "businessorganisationnumber": 807,
+      "businessorganisationdescriptionde": "Automobildienst SZU",
+      "geopos": {
+        "lon": 8.647840055417685,
+        "lat": 47.21227523810216
+      },
+      "validfrom": "2021-04-01",
+      "validto": "9999-12-31"
+    },
+    {
+      "designationofficial": "Wädenswil, Meierhof",
+      "number": 8590863,
+      "numbershort": 90863,
+      "cantonabbreviation": "ZH",
+      "businessorganisationnumber": 807,
+      "businessorganisationdescriptionde": "Automobildienst SZU",
+      "geopos": {
+        "lon": 8.682092928796814,
+        "lat": 47.22295690425132
+      },
+      "validfrom": "2026-01-15",
+      "validto": "9999-12-31"
+    },
+    {
+      "designationofficial": "Wädenswil, Neudorf",
+      "number": 8590866,
+      "numbershort": 90866,
+      "cantonabbreviation": "ZH",
+      "businessorganisationnumber": 807,
+      "businessorganisationdescriptionde": "Automobildienst SZU",
+      "geopos": {
+        "lon": 8.665680576039597,
+        "lat": 47.23132817526821
+      },
+      "validfrom": "2026-01-15",
+      "validto": "9999-12-31"
+    },
+    {
+      "designationofficial": "Wädenswil, Neubühl",
+      "number": 8503990,
+      "numbershort": 3990,
+      "cantonabbreviation": "ZH",
+      "businessorganisationnumber": 807,
+      "businessorganisationdescriptionde": "Automobildienst SZU",
+      "geopos": {
+        "lon": 8.63439332809218,
+        "lat": 47.23203664468327
+      },
+      "validfrom": "2026-01-15",
+      "validto": "9999-12-31"
+    },
+    {
+      "designationofficial": "Wädenswil, Krähbach",
+      "number": 8573575,
+      "numbershort": 73575,
+      "cantonabbreviation": "ZH",
+      "businessorganisationnumber": 807,
+      "businessorganisationdescriptionde": "Automobildienst SZU",
+      "geopos": {
+        "lon": 8.664164266410078,
+        "lat": 47.2309937052076
+      },
+      "validfrom": "2021-04-01",
+      "validto": "9999-12-31"
+    },
+    {
+      "designationofficial": "Wädenswil, Schwanen",
+      "number": 8573576,
+      "numbershort": 73576,
+      "cantonabbreviation": "ZH",
+      "businessorganisationnumber": 807,
+      "businessorganisationdescriptionde": "Automobildienst SZU",
+      "geopos": {
+        "lon": 8.67051218147047,
+        "lat": 47.22968240950825
+      },
+      "validfrom": "2024-02-05",
+      "validto": "9999-12-31"
+    },
+    {
+      "designationofficial": "Wädenswil, Frohmatt",
+      "number": 8590859,
+      "numbershort": 90859,
+      "cantonabbreviation": "ZH",
+      "businessorganisationnumber": 807,
+      "businessorganisationdescriptionde": "Automobildienst SZU",
+      "geopos": {
+        "lon": 8.662590019788997,
+        "lat": 47.229724056328614
+      },
+      "validfrom": "2021-04-01",
+      "validto": "9999-12-31"
+    },
+    {
+      "designationofficial": "Wädenswil, Herrlisberg",
+      "number": 8503869,
+      "numbershort": 3869,
+      "cantonabbreviation": "ZH",
+      "businessorganisationnumber": 807,
+      "businessorganisationdescriptionde": "Automobildienst SZU",
+      "geopos": {
+        "lon": 8.659949638326905,
+        "lat": 47.219937747611574
+      },
+      "validfrom": "2021-04-01",
+      "validto": "9999-12-31"
+    },
+    {
+      "designationofficial": "Wädenswil, Oedischwend",
+      "number": 8573571,
+      "numbershort": 73571,
+      "cantonabbreviation": "ZH",
+      "businessorganisationnumber": 807,
+      "businessorganisationdescriptionde": "Automobildienst SZU",
+      "geopos": {
+        "lon": 8.647301964804656,
+        "lat": 47.22643114726889
+      },
+      "validfrom": "2021-04-01",
+      "validto": "9999-12-31"
+    },
+    {
+      "designationofficial": "Wädenswil, Chalchtaren",
+      "number": 8573572,
+      "numbershort": 73572,
+      "cantonabbreviation": "ZH",
+      "businessorganisationnumber": 807,
+      "businessorganisationdescriptionde": "Automobildienst SZU",
+      "geopos": {
+        "lon": 8.64039190689216,
+        "lat": 47.230380592487904
+      },
+      "validfrom": "2021-04-01",
+      "validto": "9999-12-31"
+    },
+    {
+      "designationofficial": "Wädenswil, Mühlebach",
+      "number": 8573578,
+      "numbershort": 73578,
+      "cantonabbreviation": "ZH",
+      "businessorganisationnumber": 807,
+      "businessorganisationdescriptionde": "Automobildienst SZU",
+      "geopos": {
+        "lon": 8.673060965191905,
+        "lat": 47.22393599974073
+      },
+      "validfrom": "2021-04-01",
+      "validto": "9999-12-31"
+    },
+    {
+      "designationofficial": "Wädenswil, Pausenplatz",
+      "number": 8505324,
+      "numbershort": 5324,
+      "cantonabbreviation": "ZH",
+      "businessorganisationnumber": 807,
+      "businessorganisationdescriptionde": "Automobildienst SZU",
+      "geopos": {
+        "lon": 8.675465841628839,
+        "lat": 47.22857000541081
+      },
+      "validfrom": "2021-01-18",
+      "validto": "9999-12-31"
+    },
+    {
+      "designationofficial": "Wädenswil, Eichweid",
+      "number": 8590857,
+      "numbershort": 90857,
+      "cantonabbreviation": "ZH",
+      "businessorganisationnumber": 807,
+      "businessorganisationdescriptionde": "Automobildienst SZU",
+      "geopos": {
+        "lon": 8.675679608028124,
+        "lat": 47.218363670604425
+      },
+      "validfrom": "2025-02-11",
+      "validto": "9999-12-31"
+    },
+    {
+      "designationofficial": "Wädenswil, Boller",
+      "number": 8590854,
+      "numbershort": 90854,
+      "cantonabbreviation": "ZH",
+      "businessorganisationnumber": 807,
+      "businessorganisationdescriptionde": "Automobildienst SZU",
+      "geopos": {
+        "lon": 8.682133458323797,
+        "lat": 47.22149095756838
+      },
+      "validfrom": "2026-01-15",
+      "validto": "9999-12-31"
+    },
+    {
+      "designationofficial": "Wädenswil, Giessen",
+      "number": 8590860,
+      "numbershort": 90860,
+      "cantonabbreviation": "ZH",
+      "businessorganisationnumber": 807,
+      "businessorganisationdescriptionde": "Automobildienst SZU",
+      "geopos": {
+        "lon": 8.682786746516198,
+        "lat": 47.223669420764956
+      },
+      "validfrom": "2021-04-01",
+      "validto": "9999-12-31"
+    },
+    {
+      "designationofficial": "Wädenswil, Töbelibach",
+      "number": 8590874,
+      "numbershort": 90874,
+      "cantonabbreviation": "ZH",
+      "businessorganisationnumber": 807,
+      "businessorganisationdescriptionde": "Automobildienst SZU",
+      "geopos": {
+        "lon": 8.669203771568442,
+        "lat": 47.22330259691408
+      },
+      "validfrom": "2021-04-01",
+      "validto": "9999-12-31"
+    },
+    {
+      "designationofficial": "Wädenswil, Friedhof",
+      "number": 8593251,
+      "numbershort": 93251,
+      "cantonabbreviation": "ZH",
+      "businessorganisationnumber": 807,
+      "businessorganisationdescriptionde": "Automobildienst SZU",
+      "geopos": {
+        "lon": 8.673635319686182,
+        "lat": 47.22079032373242
+      },
+      "validfrom": "2021-04-01",
+      "validto": "9999-12-31"
+    },
+    {
+      "designationofficial": "Wädenswil, Rötiboden",
+      "number": 8581572,
+      "numbershort": 81572,
+      "cantonabbreviation": "ZH",
+      "businessorganisationnumber": 807,
+      "businessorganisationdescriptionde": "Automobildienst SZU",
+      "geopos": {
+        "lon": 8.664075880881548,
+        "lat": 47.22699399267467
+      },
+      "validfrom": "2025-02-11",
+      "validto": "9999-12-31"
+    }
+  ]
+}

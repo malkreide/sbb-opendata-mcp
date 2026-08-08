@@ -1,0 +1,131 @@
+{
+  "total_count": 5724,
+  "results": [
+    {
+      "code_codice": "AA",
+      "uic": 8502113.0,
+      "bahnhof_gare_stazione": "Aarau",
+      "kt_ct_cantone": "AG",
+      "isb_gi": "SBB",
+      "jahr_annee_anno": "2025",
+      "dtv_tjm_tgm": 40100.0,
+      "dwv_tmjo_tfm": 46600.0,
+      "dnwv_tmjno_tmgnl": 25700.0,
+      "evu_ef_itf": "SBB, SOB",
+      "bemerkungen": "Ohne AVA.",
+      "remarques": "Sans AVA.",
+      "note": "Senza AVA.",
+      "remarks": "Without AVA.",
+      "lod": "http://lod.opentransportdata.swiss/didok/didok85",
+      "geopos": {
+        "lon": 8.051273718700699,
+        "lat": 47.39135951416977
+      }
+    },
+    {
+      "code_codice": "AB",
+      "uic": 8507472.0,
+      "bahnhof_gare_stazione": "Ausserberg",
+      "kt_ct_cantone": "VS",
+      "isb_gi": "BLS",
+      "jahr_annee_anno": "2025",
+      "dtv_tjm_tgm": 180.0,
+      "dwv_tmjo_tfm": 170.0,
+      "dnwv_tmjno_tmgnl": 210.0,
+      "evu_ef_itf": "BLS",
+      "bemerkungen": null,
+      "remarques": null,
+      "note": null,
+      "remarks": null,
+      "lod": "http://lod.opentransportdata.swiss/didok/didok85",
+      "geopos": {
+        "lon": 7.8441670280993065,
+        "lat": 46.31234824494208
+      }
+    },
+    {
+      "code_codice": "ABO",
+      "uic": 8502000.0,
+      "bahnhof_gare_stazione": "Aarburg-Oftringen",
+      "kt_ct_cantone": "AG",
+      "isb_gi": "SBB",
+      "jahr_annee_anno": "2025",
+      "dtv_tjm_tgm": 2500.0,
+      "dwv_tmjo_tfm": 3000.0,
+      "dnwv_tmjno_tmgnl": 1400.0,
+      "evu_ef_itf": "SBB, SOB",
+      "bemerkungen": null,
+      "remarques": null,
+      "note": null,
+      "remarks": null,
+      "lod": "http://lod.opentransportdata.swiss/didok/didok85",
+      "geopos": {
+        "lon": 7.908222606719322,
+        "lat": 47.320268469495055
+      }
+    },
+    {
+      "code_codice": "ALL",
+      "uic": 8501035.0,
+      "bahnhof_gare_stazione": "Allaman",
+      "kt_ct_cantone": "VD",
+      "isb_gi": "SBB",
+      "jahr_annee_anno": "2025",
+      "dtv_tjm_tgm": 4900.0,
+      "dwv_tmjo_tfm": 5700.0,
+      "dnwv_tmjno_tmgnl": 3000.0,
+      "evu_ef_itf": "SBB",
+      "bemerkungen": null,
+      "remarques": null,
+      "note": null,
+      "remarks": null,
+      "lod": "http://lod.opentransportdata.swiss/didok/didok85",
+      "geopos": {
+        "lon": 6.399697079747334,
+        "lat": 46.47575352079991
+      }
+    },
+    {
+      "code_codice": "ARB",
+      "uic": 8506308.0,
+      "bahnhof_gare_stazione": "Arbon",
+      "kt_ct_cantone": "TG",
+      "isb_gi": "SBB",
+      "jahr_annee_anno": "2025",
+      "dtv_tjm_tgm": 2100.0,
+      "dwv_tmjo_tfm": 2300.0,
+      "dnwv_tmjno_tmgnl": 1500.0,
+      "evu_ef_itf": "Thurbo",
+      "bemerkungen": null,
+      "remarques": null,
+      "note": null,
+      "remarks": null,
+      "lod": "http://lod.opentransportdata.swiss/didok/didok85",
+      "geopos": {
+        "lon": 9.433358582621896,
+        "lat": 47.510587732978976
+      }
+    },
+    {
+      "code_codice": "AST",
+      "uic": 8508317.0,
+      "bahnhof_gare_stazione": "Alpnachstad",
+      "kt_ct_cantone": "OW",
+      "isb_gi": "ZB",
+      "jahr_annee_anno": "2025",
+      "dtv_tjm_tgm": 780.0,
+      "dwv_tmjo_tfm": 750.0,
+      "dnwv_tmjno_tmgnl": 840.0,
+      "evu_ef_itf": "Zentralbahn",
+      "bemerkungen": "Ohne PB.",
+      "remarques": "Sans PB.",
+      "note": "Senza PB.",
+      "remarks": "Without PB.",
+      "lod": "http://lod.opentransportdata.swiss/didok/didok85",
+      "geopos": {
+        "lon": 8.277848272022256,
+        "lat": 46.9550415274341
+      }
+    }
+  ]
+}
