@@ -1,0 +1,149 @@
+{
+  "total_count": 61,
+  "results": [
+    {
+      "dataset_id": "21196_behig-haltekantepunkt",
+      "metas": {
+        "default": {
+          "title": "21196_BehiG Haltekantepunkt",
+          "records_count": 496711
+        },
+        "dcat": {
+          "accrualperiodicity": null
+        }
+      }
+    },
+    {
+      "dataset_id": "21197_behig-haltekantesegment",
+      "metas": {
+        "default": {
+          "title": "21197_BehiG Haltekantesegment",
+          "records_count": 11171
+        },
+        "dcat": {
+          "accrualperiodicity": null
+        }
+      }
+    },
+    {
+      "dataset_id": "anzahl-sbb-bahnhofbenutzer-wochentag",
+      "metas": {
+        "default": {
+          "title": "Amount of Trainstation User (Daily)",
+          "records_count": 392
+        },
+        "dcat": {
+          "accrualperiodicity": "annual"
+        }
+      }
+    },
+    {
+      "dataset_id": "jahresformation",
+      "metas": {
+        "default": {
+          "title": "Annual formation",
+          "records_count": 480057
+        },
+        "dcat": {
+          "accrualperiodicity": null
+        }
+      }
+    },
+    {
+      "dataset_id": "jahresformation-2018",
+      "metas": {
+        "default": {
+          "title": "Annual formation – 2018",
+          "records_count": 59827
+        },
+        "dcat": {
+          "accrualperiodicity": null
+        }
+      }
+    },
+    {
+      "dataset_id": "jahresformation-verkehrsperiode-2017",
+      "metas": {
+        "default": {
+          "title": "Annual formation (transport period 2018)",
+          "records_count": 4914
+        },
+        "dcat": {
+          "accrualperiodicity": null
+        }
+      }
+    },
+    {
+      "dataset_id": "verkehrsperiode-jahresformation",
+      "metas": {
+        "default": {
+          "title": "Annual formation transport periods",
+          "records_count": 64525
+        },
+        "dcat": {
+          "accrualperiodicity": null
+        }
+      }
+    },
+    {
+      "dataset_id": "verbunde",
+      "metas": {
+        "default": {
+          "title": "Annual travelcards",
+          "records_count": 59287
+        },
+        "dcat": {
+          "accrualperiodicity": null
+        }
+      }
+    },
+    {
+      "dataset_id": "anzahl-sbb-bahnhofbenutzer-tagesverlauf",
+      "metas": {
+        "default": {
+          "title": "Anzahl SBB-Bahnhofbenutzer (Tagesverlauf)",
+          "records_count": 1396
+        },
+        "dcat": {
+          "accrualperiodicity": "annual"
+        }
+      }
+    },
+    {
+      "dataset_id": "brandschutzwand",
+      "metas": {
+        "default": {
+          "title": "Brandschutzwand",
+          "records_count": 427
+        },
+        "dcat": {
+          "accrualperiodicity": null
+        }
+      }
+    },
+    {
+      "dataset_id": "brucken",
+      "metas": {
+        "default": {
+          "title": "Bridges",
+          "records_count": 4057
+        },
+        "dcat": {
+          "accrualperiodicity": null
+        }
+      }
+    },
+    {
+      "dataset_id": "dashboard_behig_tu",
+      "metas": {
+        "default": {
+          "title": "Dashboard",
+          "records_count": 0
+        },
+        "dcat": {
+          "accrualperiodicity": null
+        }
+      }
+    }
+  ]
+}

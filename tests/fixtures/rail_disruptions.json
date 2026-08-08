@@ -1,0 +1,89 @@
+{
+  "total_count": 5849,
+  "results": [
+    {
+      "title": "Limited service: Flamatt - Laupen BE",
+      "link": "https://www.sbb.ch/en/travel-information/rail-traffic-information/operations-disruptions.expandedheader.html/1214206",
+      "description": "08.08.2026 09:21 - 10:30Limited train service between Flamatt and Laupen BE.This is due to a technical difficulties on the infrastructure.The restriction lasts until approx. 10:30.Line S2 is affected.Allow for delays and cancellations.",
+      "published": "2026-08-08T07:28:53+00:00",
+      "cause": null,
+      "startdatetime": "2026-08-08T09:21:00+00:00",
+      "enddatetime": "2026-08-08T10:30:00+00:00",
+      "dailyvaliditybegin": "00:00:00",
+      "dailyvalidityend": "23:59:00",
+      "type": "2",
+      "author": "SBB",
+      "description_html": "08.08.2026 09:21 - 10:30<br /><br />Limited train service between Flamatt and Laupen BE.<br />This is due to a technical difficulties on the infrastructure.<br />The restriction lasts until approx. 10:30.<br />Line S2 is affected.<br />Allow for delays and cancellations."
+    },
+    {
+      "title": "Limited service: Flamatt - Laupen BE",
+      "link": "https://www.sbb.ch/en/travel-information/rail-traffic-information/operations-disruptions.expandedheader.html/1214206",
+      "description": "08.08.2026 09:21 - 10:30Limited train service between Flamatt and Laupen BE.This is due to a technical difficulties on the infrastructure.Line S2 is affected.Allow for delays and cancellations.",
+      "published": "2026-08-08T07:22:55+00:00",
+      "cause": null,
+      "startdatetime": "2026-08-08T09:21:00+00:00",
+      "enddatetime": "2026-08-08T10:30:00+00:00",
+      "dailyvaliditybegin": "00:00:00",
+      "dailyvalidityend": "23:59:00",
+      "type": "2",
+      "author": "SBB",
+      "description_html": "08.08.2026 09:21 - 10:30<br /><br />Limited train service between Flamatt and Laupen BE.<br />This is due to a technical difficulties on the infrastructure.<br />Line S2 is affected.<br />Allow for delays and cancellations."
+    },
+    {
+      "title": "Limited service: Baden",
+      "link": "https://www.sbb.ch/en/travel-information/rail-traffic-information/operations-disruptions.expandedheader.html/1214159",
+      "description": "08.08.2026 06:25 - 09:25Limited train service at Baden.This is due to a technical difficulties on the infrastructure.The restriction lasts until approx. 07:30.Lines IR36, RE12, S6 and S23 are affected.Allow for delays, cancellations and diversions.",
+      "published": "2026-08-08T05:08:58+00:00",
+      "cause": null,
+      "startdatetime": "2026-08-08T06:25:00+00:00",
+      "enddatetime": "2026-08-08T09:25:00+00:00",
+      "dailyvaliditybegin": "00:00:00",
+      "dailyvalidityend": "23:59:00",
+      "type": "2",
+      "author": "SBB",
+      "description_html": "08.08.2026 06:25 - 09:25<br /><br />Limited train service at Baden.<br />This is due to a technical difficulties on the infrastructure.<br />The restriction lasts until approx. 07:30.<br />Lines IR36, RE12, S6 and S23 are affected.<br />Allow for delays, cancellations and diversions."
+    },
+    {
+      "title": "Limited service: Baden",
+      "link": "https://www.sbb.ch/en/travel-information/rail-traffic-information/operations-disruptions.expandedheader.html/1214159",
+      "description": "08.08.2026 06:25 - 09:25Limited train service at Baden.This is due to a technical difficulties on the infrastructure.The restriction lasts until approx. 07:15.Lines IR36, RE12, S6 and S23 are affected.Allow for delays, cancellations and diversions.",
+      "published": "2026-08-08T04:44:51+00:00",
+      "cause": null,
+      "startdatetime": "2026-08-08T06:25:00+00:00",
+      "enddatetime": "2026-08-08T09:25:00+00:00",
+      "dailyvaliditybegin": "00:00:00",
+      "dailyvalidityend": "23:59:00",
+      "type": "2",
+      "author": "SBB",
+      "description_html": "08.08.2026 06:25 - 09:25<br /><br />Limited train service at Baden.<br />This is due to a technical difficulties on the infrastructure.<br />The restriction lasts until approx. 07:15.<br />Lines IR36, RE12, S6 and S23 are affected.<br />Allow for delays, cancellations and diversions."
+    },
+    {
+      "title": "Limited service: Moutier - Crémines",
+      "link": "https://www.sbb.ch/en/travel-information/rail-traffic-information/operations-disruptions.expandedheader.html/1214021",
+      "description": "07.08.2026 20:34 - 23:34Limited train service on the Moutier - Solothurn line between Moutier and Crémines.This is due to a damage to the tracks.The restriction lasts until approx. 22:30.Line S21 is affected.Allow for delays.Passengers travelling between Moutier, gare and Crémines, centre du village use the replacement bus (EV).",
+      "published": "2026-08-07T20:18:58+00:00",
+      "cause": null,
+      "startdatetime": "2026-08-07T20:34:00+00:00",
+      "enddatetime": "2026-08-07T23:34:00+00:00",
+      "dailyvaliditybegin": "00:00:00",
+      "dailyvalidityend": "23:59:00",
+      "type": "2",
+      "author": "SBB",
+      "description_html": "07.08.2026 20:34 - 23:34<br /><br />Limited train service on the Moutier - Solothurn line between Moutier and Crémines.<br />This is due to a damage to the tracks.<br />The restriction lasts until approx. 22:30.<br />Line S21 is affected.<br />Allow for delays.<br />Passengers travelling between Moutier, gare and Crémines, centre du village use the replacement bus (EV)."
+    },
+    {
+      "title": "Interrupted service: Moutier - Crémines",
+      "link": "https://www.sbb.ch/en/travel-information/rail-traffic-information/operations-disruptions.expandedheader.html/1214021",
+      "description": "07.08.2026 20:34 - 23:34Interrupted train service on the Moutier - Solothurn line between Moutier and Crémines.This is due to a damage to the tracks.The restriction lasts until approx. 22:30.Line S21 is affected.No trains are running.Passengers travelling between Moutier, gare and Crémines, centre du village use the replacement bus (EV).Further information will be provided as soon as possible.",
+      "published": "2026-08-07T19:28:45+00:00",
+      "cause": null,
+      "startdatetime": "2026-08-07T20:34:00+00:00",
+      "enddatetime": "2026-08-07T23:34:00+00:00",
+      "dailyvaliditybegin": "00:00:00",
+      "dailyvalidityend": "23:59:00",
+      "type": "2",
+      "author": "SBB",
+      "description_html": "07.08.2026 20:34 - 23:34<br /><br />Interrupted train service on the Moutier - Solothurn line between Moutier and Crémines.<br />This is due to a damage to the tracks.<br />The restriction lasts until approx. 22:30.<br />Line S21 is affected.<br />No trains are running.<br />Passengers travelling between Moutier, gare and Crémines, centre du village use the replacement bus (EV).<br />Further information will be provided as soon as possible."
+    }
+  ]
+}

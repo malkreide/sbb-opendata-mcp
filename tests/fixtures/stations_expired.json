@@ -1,0 +1,47 @@
+{
+  "total_count": 15,
+  "results": [
+    {
+      "designationofficial": "Niederbipp, Aengi",
+      "number": 8512283,
+      "numbershort": 12283,
+      "cantonabbreviation": "BE",
+      "businessorganisationnumber": 81,
+      "businessorganisationdescriptionde": "Aare Seeland mobil (snb)",
+      "geopos": {
+        "lon": 7.700016875435567,
+        "lat": 47.280513658488516
+      },
+      "validfrom": "2026-07-01",
+      "validto": "2026-07-30"
+    },
+    {
+      "designationofficial": "Paléo, parc Chevalin",
+      "number": 8512661,
+      "numbershort": 12661,
+      "cantonabbreviation": "VD",
+      "businessorganisationnumber": 801,
+      "businessorganisationdescriptionde": "PostAuto AG",
+      "geopos": {
+        "lon": 6.208639006143741,
+        "lat": 46.400443010293216
+      },
+      "validfrom": "2026-07-01",
+      "validto": "2026-07-30"
+    },
+    {
+      "designationofficial": "Nyon, Rte St-Cergue - Canal",
+      "number": 8512665,
+      "numbershort": 12665,
+      "cantonabbreviation": "VD",
+      "businessorganisationnumber": 801,
+      "businessorganisationdescriptionde": "PostAuto AG",
+      "geopos": {
+        "lon": 6.2344140061532975,
+        "lat": 46.38620201029961
+      },
+      "validfrom": "2026-07-01",
+      "validto": "2026-07-30"
+    }
+  ]
+}

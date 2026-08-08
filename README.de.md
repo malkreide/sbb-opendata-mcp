@@ -194,7 +194,6 @@ python -m sbb_opendata_mcp.server --http --port 8000
 |------|-------------|---------------------|
 | `sbb_get_passenger_frequency` | Ein-/Aussteigende nach Bahnhof und Jahr (DTV/DWV) | Jährlich |
 | `sbb_get_rail_disruptions` | Live-Bahnverkehrsmeldungen | Alle 5 Min. |
-| `sbb_get_infrastructure_construction_projects` | Infrastruktur-Bauprojekte (Bahnhöfe, Strecken) | Laufend |
 | `sbb_get_real_estate_projects` | Immobilien-Bauprojekte der SBB | Täglich |
 | `sbb_get_trains_per_segment` | Zugzahlen pro Streckenabschnitt (SBB, BLS, SOB …) | Jährlich |
 | `sbb_get_platform_data` | Perrondaten (Länge, Typ, Fläche) | Laufend |
@@ -214,7 +213,7 @@ Alle Tools unterstützen `response_format: "markdown"` (lesbar) und `"json"`
 | *«Wie viele Personen stiegen 2024 täglich in Zürich HB ein und aus?»* | `sbb_get_passenger_frequency` |
 | *«Gibt es aktuell Störungen auf dem Schweizer Bahnnetz?»* | `sbb_get_rail_disruptions` |
 | *«Vergleiche Zürich HB, Bern und Basel SBB»* | `sbb_compare_stations` |
-| *«Welche SBB-Bauprojekte laufen in Zürich?»* | `sbb_get_infrastructure_construction_projects` |
+| *«Welche SBB-Immobilien-Bauprojekte laufen?»* | `sbb_get_real_estate_projects` |
 | *«Wie viele Züge fahren jährlich auf der Strecke Zürich–Winterthur?»* | `sbb_get_trains_per_segment` |
 | *«Welche Haltestellen gibt es in Wädenswil?»* | `sbb_search_stations` |
 
@@ -229,7 +228,7 @@ Alle Tools unterstützen `response_format: "markdown"` (lesbar) und `"json"`
 │   Claude / KI   │────▶│   SBB Open Data MCP       │────▶│       data.sbb.ch        │
 │   (MCP-Host)    │◀────│   (MCP-Server)            │◀────│                          │
 └─────────────────┘     │                           │     │  OpenDataSoft REST v2.1  │
-                        │  10 Tools                 │     │  (öffentlich, kein Key)  │
+                        │  9 Tools                  │     │  (öffentlich, kein Key)  │
                         │  Stdio | Streamable HTTP  │     │                          │
                         │                           │     │  passagierfrequenz       │
                         │  Gemeinsamer httpx-Client │     │  rail-traffic-information │
@@ -270,7 +269,7 @@ sbb-opendata-mcp/
 
 ## Sicherheit & Grenzen
 
-- **Rein lesend:** Alle 10 Tools führen nur lesende HTTP-GET-Anfragen aus – upstream wird nichts geschrieben, geändert oder gelöscht.
+- **Rein lesend:** Alle 9 Tools führen nur lesende HTTP-GET-Anfragen aus – upstream wird nichts geschrieben, geändert oder gelöscht.
 - **Keine Personendaten:** Abfragen sind transient und werden nicht gespeichert. Das Portal liefert aggregierte Statistiken, Infrastruktur- und Betriebsmetadaten. Es werden keine PII verarbeitet oder gespeichert.
 - **Kein API-Key:** Die Daten sind öffentlich und frei. Es gibt keine Authentifizierung und kein zu verwaltendes Secret.
 - **Injection-gehärtet:** `year`/`canton` werden per Regex validiert, und jeder in eine ODSQL-`where`-Klausel interpolierte Wert wird über einen zentralen Helfer escaped.
@@ -302,7 +301,27 @@ PYTHONPATH=src pytest tests/ -m "not live"
 
 # Live-API-Smoke-Tests (benötigen Netzwerkzugriff auf data.sbb.ch)
 PYTHONPATH=src pytest tests/ -m live
+
+# Fixtures neu von data.sbb.ch aufzeichnen (schreibt tests/fixtures/PROVENANCE.md)
+python scripts/record_fixtures.py
 ```
+
+Die Nutzdaten der Unit-Tests sind **aufgezeichnet, nicht ausgedacht**. Quelle,
+Aufzeichnungsdatum, Auswahlregel und SHA-256 je Datei stehen in
+[`tests/fixtures/PROVENANCE.md`](tests/fixtures/PROVENANCE.md).
+
+`tests/fixtures/dataset_fields.json` ist kein Datenauszug, sondern **der
+Vertrag**: Die Explore-v2.1-API deklariert je Datensatz ihre Feldnamen, und ein
+`select` oder `order_by` auf ein Feld, das sie nicht führt, beantwortet sie mit
+**HTTP 400** — nicht mit weniger Spalten. `TestFieldContract` hält jeden
+Feldnamen des Servers gegen diese Deklaration, damit die nächste Umbenennung
+als Testfehler auffällt und nicht als gescheiterte Anfrage eines Nutzers. Bis
+zum 2026-08-08 waren aus genau diesem Grund drei von zehn Werkzeugen dauerhaft
+kaputt.
+
+> **Die CI fährt keine Live-Tests** (`-m "not live"`). Für zwei der drei
+> kaputten Werkzeuge *gab* es Live-Tests — `test_live_search_waedenswil` und
+> `test_live_list_datasets`. Die Abdeckung war da, der Lauf nicht.
 
 ---
 

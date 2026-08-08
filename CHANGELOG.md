@@ -5,6 +5,91 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Behoben — drei von zehn Werkzeugen waren dauerhaft kaputt
+
+Kein einziger Payload dieser Suite war je von der Quelle geholt worden. Mit
+**null** Inline-Payloads stand dieser Server auf Platz 41 von 42 der
+Portfolio-Rangfolge — und die Zahl misst Exposition, nicht Risiko.
+
+Beim ersten Vergleich mit `data.sbb.ch` am 2026-08-08 antworteten drei der zehn
+Werkzeuge auf jede Anfrage mit einem Fehler:
+
+**1. Die Haltestellensuche wählte sieben Feldnamen, die es nicht gibt.**
+`sbb_search_stations` fragte den DiDok-Datensatz nach `bezeichnung_offiziell`,
+`uic`, `kanton_kuerzel`, `dst_nr`, `tu_nummer`, `geopos_ost` und `geopos_nord`.
+Der Datensatz führt ausschliesslich **englische** Feldnamen —
+`designationofficial`, `number`, `cantonabbreviation` und so fort. **Keiner der
+sieben existiert.** Die Explore-API beantwortet ein unbekanntes Feld im
+`select` mit **HTTP 400**, nicht mit weniger Spalten; jede Haltestellensuche
+scheiterte also mit «API-Anfrage fehlgeschlagen».
+
+**2. Die Katalogliste sortierte nach einem Feld, das der Endpunkt nicht kennt.**
+`sbb_list_datasets` schickte `order_by=metas.default.title`. Der
+Katalog-Endpunkt kennt `title`, aber kein `metas.default.title` —
+`ODSQLError: Unknown field`. Damit hat das Werkzeug, mit dem man herausfindet,
+welche Datensätze es überhaupt gibt, nie funktioniert. Es sind 61.
+
+**3. Ein Werkzeug fragte einen Datensatz, den es nicht mehr gibt.**
+`sbb_get_infrastructure_construction_projects` griff auf `construction-projects`
+zu — HTTP 404, und der Katalog führt auch keinen Nachfolger. Das Werkzeug ist
+entfernt statt mit einer schöneren Fehlermeldung versehen: Eine Fähigkeit
+anzubieten, die es nicht gibt, ist derselbe Fehler wie ein leeres Ergebnis, nur
+lauter. Die unbenutzte Konstante `DATASET_ELEVATORS` (`aufzugsstammdaten`, seit
+längerem ebenfalls 404) fällt mit weg.
+
+Die verbleibenden **neun** Werkzeuge laufen alle; nachgeprüft, indem jedes
+einzeln gegen die Quelle gefahren wurde.
+
+**Nebenbefund:** Die DiDok-Liste schreibt «unbefristet gültig» als `9999-12-31`
+— gemessen bei 59'515 von 59'530 Einträgen. Das ist derselbe Füllwert, der in
+`swiss-democracy-mcp` als Parteiparole hinausging. Die Haltestellentabelle
+zeigt jetzt «unbefristet» statt eines Datums, das keines ist; ein echtes
+Ablaufdatum (15 Einträge) bleibt sichtbar.
+
+### Hinzugefuegt — der Vertrag wird aufgezeichnet, nicht nur die Antwort
+
+**`scripts/record_fixtures.py`** holt sechs Antworten von `data.sbb.ch` und
+schreibt `tests/fixtures/PROVENANCE.md` mit Quelle, **Aufzeichnungsdatum**,
+Auswahlregel und SHA-256 je Datei.
+
+Eine davon ist kein Datenauszug: **`dataset_fields.json`** hält fest, welche
+Felder die Quelle je Datensatz deklariert (`fields[].name` unter
+`/datasets/<id>`). Genau daran hing der Befund — ein unbekanntes Feld ist hier
+kein fehlender Wert, sondern ein Ausfall der ganzen Anfrage. `TestFieldContract`
+hält jeden Feldnamen und jeden Sortierschlüssel des Servers gegen diese
+Deklaration. Die Namen stehen dafür neu als benannte Konstanten
+(`FIELDS_STATIONS`, `ORDER_BY_CATALOG`, …) statt als Literale in den Werkzeugen:
+Ein Test kann nur prüfen, was er benennen kann.
+
+**Auswahl nach Merkmal, nicht nach Position.** Die Haltestellen-Fixture ist die
+Anfrage des Servers selbst, mit seiner eigenen Feldliste — nur so belegt sie,
+dass die Namen stimmen. Die zweite Haltestellen-Fixture enthält Einträge mit
+echtem Ablaufdatum; «die ersten N» hätten von 59'530 Zeilen keine der 15
+getroffen, um die es geht. Das Skript bricht ab, wenn der Zuschnitt nur einen
+Betreiber trifft, wenn er auf eine Seite passt, wenn kein abgelaufener Eintrag
+mehr existiert oder wenn der Katalog einen benutzten Datensatz nicht mehr führt.
+
+**`tests/fixture_data.py`** behandelt einen fehlenden Namen als Fehler statt als
+leere Struktur.
+
+**Gegenprobe geführt:** Mit zurückgedrehten Feldnamen fallen die beiden neuen
+Vertragszusicherungen.
+
+### Behoben — die Live-Suite hing von der Testreihenfolge ab
+
+Der Server hält einen prozessweiten httpx-Client; `pytest-asyncio` gibt jedem
+Test einen eigenen Event-Loop. Ein Client, der auf einem inzwischen
+geschlossenen Loop entstanden war, meldete beim nächsten Zugriff
+`RuntimeError: Event loop is closed` — je nach Reihenfolge fiel derselbe Test
+mal und mal nicht. Ein Testlauf, dessen Ausgang von der Reihenfolge abhängt,
+wird nach dem zweiten Fehlalarm nicht mehr gelesen. Neu setzt eine
+`autouse`-Fixture den Client je Test zurück.
+
+**Und der eigentliche Punkt dazu:** Für zwei der drei kaputten Werkzeuge *gab*
+es Live-Tests — `test_live_search_waedenswil` und `test_live_list_datasets`.
+Sie hätten die Befunde gefunden. Die CI fährt aber nur `-m "not live"`, und
+einen Live-Job gibt es nicht. **Die Abdeckung war da, der Lauf nicht.**
+
 ## [0.3.4] — 2026-07-31
 
 ### Geaendert
