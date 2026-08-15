@@ -40,7 +40,10 @@ dependencies = [
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
-    "ruff>=0.4.0",
+    # Exakt gepinnt, damit `pip install -e ".[dev]"` dieselbe Version liefert,
+    # gegen die die CI prueft. Beim Anheben auch .github/workflows/ci.yml und
+    # .pre-commit-config.yaml anfassen.
+    "ruff==0.16.1",
 ]
 
 [project.scripts]
@@ -58,13 +61,15 @@ packages = ["src/sbb_opendata_mcp"]
 dependencies = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
-    "ruff>=0.4.0",
+    "ruff==0.16.1",
 ]
 
+# Pfade wie in ci.yml — `scripts/` gehoert dazu, sonst ist ein gruenes
+# `hatch run lint` mit einer roten CI vereinbar.
 [tool.hatch.envs.default.scripts]
 test = "PYTHONPATH=src pytest tests/ -v"
-lint = "ruff check src/ tests/"
-fmt = "ruff format src/ tests/"
+lint = "ruff check src/ tests/ scripts/"
+fmt = "ruff format src/ tests/ scripts/"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

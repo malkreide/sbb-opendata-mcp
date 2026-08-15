@@ -1,0 +1,50 @@
+name: Live-Tests
+
+# Faehrt die Tests, die `data.sbb.ch` wirklich abfragen (`-m live`).
+#
+# Warum als eigener, geplanter Workflow und nicht in ci.yml:
+# Die CI schliesst diese Tests mit `-m "not live"` aus, und das zu Recht —
+# ein PR soll nicht rot werden, weil die Quelle gerade eine Stoerung hat.
+# Damit faehrt sie aber niemand, und ein Schema- oder Feldnamen-Wechsel bei
+# der Quelle bleibt unbemerkt: Die Unit-Tests halten den Server gegen die
+# aufgezeichneten Fixtures, nicht gegen die Quelle. Beide sind gruen, waehrend
+# die Werkzeuge produktiv HTTP 400 kassieren. Genau dieser Zustand bestand
+# schon einmal, und er fiel keinem Test auf.
+#
+# Der Plan hier schliesst die Luecke: einmal taeglich fragt jemand die Quelle.
+
+on:
+  schedule:
+    # 05:15 UTC taeglich. Nicht zur vollen Stunde, weil GitHub geplante Jobs
+    # dann staut und sie unzuverlaessig spaet startet.
+    - cron: "15 5 * * *"
+  workflow_dispatch:
+
+# Zwei Laeufe gleichzeitig gegen eine fremde API sind sinnlos.
+concurrency:
+  group: live-tests
+  cancel-in-progress: false
+
+jobs:
+  live:
+    name: Live-Tests gegen data.sbb.ch
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # Eine Version genuegt: geprueft wird die Quelle, nicht der Interpreter.
+      # Die Versions-Matrix bleibt Sache von ci.yml.
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install -e ".[dev]"
+
+      - name: Run live tests
+        run: |
+          PYTHONPATH=src pytest tests/ -m live -v
