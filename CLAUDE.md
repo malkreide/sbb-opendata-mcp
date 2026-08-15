@@ -67,10 +67,21 @@ ruff format --check src/ tests/ scripts/
 python scripts/check_version_sync.py
 ```
 
-### Live-Tests: nur ausgeschlossen, nie geplant (Befund, DRIFT-005)
+### Live-Tests (DRIFT-005)
 
-`tests/test_server.py` hat fünf `@pytest.mark.live`-Tests. `ci.yml` schliesst
-sie mit `-m "not live"` aus; ein cron- oder `schedule`-Trigger existiert in
-`.github/workflows/` nirgends. Ein Schema- oder Kopfzeilen-Wechsel bei
-`data.sbb.ch` bleibt so unbemerkt, bis ihn jemand von Hand mit
-`PYTHONPATH=src pytest tests/ -m live` sucht.
+`ci.yml` schliesst die fünf `@pytest.mark.live`-Tests mit `-m "not live"` aus —
+ein PR soll nicht rot werden, weil die Quelle gerade stört. Gefahren werden sie
+von `live.yml`, täglich 05:15 UTC und per `workflow_dispatch`. Von Hand:
+
+```sh
+PYTHONPATH=src pytest tests/ -m live
+```
+
+Der Feld-Vertrag in `TestFieldContract` hält den Server gegen die
+aufgezeichneten Fixtures, nicht gegen die Quelle. Er kann deshalb nicht
+auffallen lassen, dass die Quelle ihre Feldnamen gewechselt hat — dafür ist
+allein `live.yml` da. Wenn es rot wird, gilt Teil 1: erst die Quelle abfragen.
+
+GitHub schaltet geplante Workflows nach 60 Tagen ohne Repo-Aktivität ab. Bei
+einem ruhenden Repo ist ein grünes `live.yml` also unter Umständen gar keine
+Aussage, sondern ein Workflow, der nicht mehr läuft.
