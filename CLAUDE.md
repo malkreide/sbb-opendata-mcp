@@ -67,18 +67,30 @@ python scripts/check_version_sync.py
 
 ### Live-Tests (DRIFT-005)
 
-`ci.yml` schliesst die fünf `@pytest.mark.live`-Tests mit `-m "not live"` aus —
-ein PR soll nicht rot werden, weil die Quelle gerade stört. Gefahren werden sie
-von `live.yml`, täglich 05:15 UTC und per `workflow_dispatch`. Von Hand:
+`ci.yml` schliesst die `@pytest.mark.live`-Tests mit `-m "not live"` aus — ein
+PR soll nicht rot werden, weil die Quelle gerade stört. Gefahren werden sie von
+`live.yml`, täglich 05:15 UTC und per `workflow_dispatch`. Von Hand:
 
 ```sh
 PYTHONPATH=src pytest tests/ -m live
 ```
 
-Der Feld-Vertrag in `TestFieldContract` hält den Server gegen die
-aufgezeichneten Fixtures, nicht gegen die Quelle. Er kann deshalb nicht
-auffallen lassen, dass die Quelle ihre Feldnamen gewechselt hat — dafür ist
-allein `live.yml` da. Wenn es rot wird, gilt Teil 1: erst die Quelle abfragen.
+Der Feld-Vertrag hat zwei Hälften, und nur beide zusammen greifen:
+
+| Test | hält | fängt |
+|---|---|---|
+| `TestFieldContract` (offline) | Server gegen `dataset_fields.json` | falsches Feld im Server |
+| `test_live_the_recording_still_matches_the_source` | Aufzeichnung gegen die Quelle | veraltete Aufzeichnung |
+
+Eine Aufzeichnung kann ihre eigene Veralterung nicht bemerken. Ohne die zweite
+Hälfte bleiben beim Feldnamen-Wechsel der Quelle alle Offline-Tests grün,
+während die Werkzeuge HTTP 400 kassieren — der Zustand vom 3.8.2026. Beide
+Hälften lesen dieselbe Liste (`fields_the_server_uses()`); als zwei Kopien
+würden ausgerechnet sie auseinanderlaufen.
+
+Wird es rot, gilt Teil 1: erst die Quelle abfragen, dann einordnen. Meldet der
+Test «Aufzeichnung überholt», ist die Antwort `python scripts/record_fixtures.py`
+— und danach ein Blick, ob der Server die verschwundenen Felder benutzt.
 
 GitHub schaltet geplante Workflows nach 60 Tagen ohne Repo-Aktivität ab. Bei
 einem ruhenden Repo ist ein grünes `live.yml` also unter Umständen gar keine
