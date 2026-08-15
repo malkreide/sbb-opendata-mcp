@@ -92,6 +92,21 @@ Wird es rot, gilt Teil 1: erst die Quelle abfragen, dann einordnen. Meldet der
 Test «Aufzeichnung überholt», ist die Antwort `python scripts/record_fixtures.py`
 — und danach ein Blick, ob der Server die verschwundenen Felder benutzt.
 
+Ein roter Lauf erzeugt ein Issue mit Label `upstream` und stabilem Titel;
+wird die Suite wieder grün, schliesst es sich selbst. Über auf oder zu
+entscheidet nicht der Exit-Code, sondern `scripts/classify_live_run.py` —
+denn ein Live-Lauf hat drei Antworten, nicht zwei:
+
+| | heisst |
+|---|---|
+| `clear` | Suite lief, alles grün — nur hier geht ein Issue zu |
+| `finding` | Suite lief, etwas fiel — Issue auf |
+| `unknown` | Suite lief **nicht** (Install kaputt, Marke umbenannt, alles übersprungen) |
+
+`unknown` ist der Fall, der ohne Klassifikator verlorengeht: pytest endet mit
+0, wenn jeder Test übersprungen wurde. Ein Job, der das als grün bucht,
+schliesst ein offenes Issue mit einem Vergleich, den es nie gab.
+
 GitHub schaltet geplante Workflows nach 60 Tagen ohne Repo-Aktivität ab. Bei
 einem ruhenden Repo ist ein grünes `live.yml` also unter Umständen gar keine
 Aussage, sondern ein Workflow, der nicht mehr läuft.
