@@ -11,6 +11,10 @@ Der wichtigste Test dieser Datei ist `test_every_field_the_server_uses_exists`.
 Die Explore-API beantwortet ein unbekanntes Feld in `select` oder `order_by`
 mit **HTTP 400**, nicht mit weniger Spalten — drei von zehn Werkzeugen waren
 deshalb dauerhaft kaputt, ohne dass ein Test es gemerkt hätte.
+
+Er prüft aber gegen die Aufzeichnung, nicht gegen die Quelle, und kann deren
+Veralterung nicht bemerken. Das tut nur sein Gegenstück
+`test_live_the_recording_still_matches_the_source` (`-m live`).
 """
 
 import json
@@ -935,6 +939,41 @@ async def test_live_search_waedenswil():
 # ---------------------------------------------------------------------------
 
 
+def fields_the_server_uses() -> list[tuple[str, tuple[str, ...]]]:
+    """(Datensatz, verwendete Feldnamen) — Sortierschlüssel ohne asc/desc.
+
+    Eine Liste, zwei Prüfungen: `TestFieldContract` hält sie gegen die
+    aufgezeichnete Deklaration, `test_live_the_recording_still_matches_the_source`
+    gegen die Quelle von heute. Als zwei Kopien wuerden ausgerechnet die beiden
+    Tests auseinanderlaufen, die Auseinanderlaufen bemerken sollen.
+    """
+    from sbb_opendata_mcp.server import (
+        DATASET_PASSENGER_FREQUENCY,
+        DATASET_PLATFORMS,
+        DATASET_RAIL_TRAFFIC,
+        DATASET_STATIONS,
+        DATASET_TRAINS_PER_SEGMENT,
+        FIELDS_STATIONS,
+        FIELDS_TRAINS_PER_SEGMENT,
+        ORDER_BY_COMPARE_STATIONS,
+        ORDER_BY_PASSENGER_FREQUENCY,
+        ORDER_BY_PLATFORMS,
+        ORDER_BY_RAIL_TRAFFIC,
+        ORDER_BY_TRAINS_PER_SEGMENT,
+    )
+
+    return [
+        (DATASET_STATIONS, FIELDS_STATIONS),
+        (DATASET_STATIONS, ("designationofficial", "cantonabbreviation", "validto")),
+        (DATASET_TRAINS_PER_SEGMENT, FIELDS_TRAINS_PER_SEGMENT),
+        (DATASET_TRAINS_PER_SEGMENT, (ORDER_BY_TRAINS_PER_SEGMENT.split()[0],)),
+        (DATASET_PASSENGER_FREQUENCY, (ORDER_BY_PASSENGER_FREQUENCY.split()[0],)),
+        (DATASET_PASSENGER_FREQUENCY, (ORDER_BY_COMPARE_STATIONS.split()[0],)),
+        (DATASET_RAIL_TRAFFIC, (ORDER_BY_RAIL_TRAFFIC.split()[0],)),
+        (DATASET_PLATFORMS, (ORDER_BY_PLATFORMS.split()[0],)),
+    ]
+
+
 class TestFieldContract:
     """Warum es diese Klasse gibt.
 
@@ -956,35 +995,8 @@ class TestFieldContract:
     """
 
     def test_every_field_the_server_uses_exists(self):
-        from sbb_opendata_mcp.server import (
-            DATASET_PASSENGER_FREQUENCY,
-            DATASET_PLATFORMS,
-            DATASET_RAIL_TRAFFIC,
-            DATASET_STATIONS,
-            DATASET_TRAINS_PER_SEGMENT,
-            FIELDS_STATIONS,
-            FIELDS_TRAINS_PER_SEGMENT,
-            ORDER_BY_COMPARE_STATIONS,
-            ORDER_BY_PASSENGER_FREQUENCY,
-            ORDER_BY_PLATFORMS,
-            ORDER_BY_RAIL_TRAFFIC,
-            ORDER_BY_TRAINS_PER_SEGMENT,
-        )
-
-        # (Datensatz, verwendete Feldnamen) — Sortierschlüssel ohne asc/desc.
-        used: list[tuple[str, tuple[str, ...]]] = [
-            (DATASET_STATIONS, FIELDS_STATIONS),
-            (DATASET_STATIONS, ("designationofficial", "cantonabbreviation", "validto")),
-            (DATASET_TRAINS_PER_SEGMENT, FIELDS_TRAINS_PER_SEGMENT),
-            (DATASET_TRAINS_PER_SEGMENT, (ORDER_BY_TRAINS_PER_SEGMENT.split()[0],)),
-            (DATASET_PASSENGER_FREQUENCY, (ORDER_BY_PASSENGER_FREQUENCY.split()[0],)),
-            (DATASET_PASSENGER_FREQUENCY, (ORDER_BY_COMPARE_STATIONS.split()[0],)),
-            (DATASET_RAIL_TRAFFIC, (ORDER_BY_RAIL_TRAFFIC.split()[0],)),
-            (DATASET_PLATFORMS, (ORDER_BY_PLATFORMS.split()[0],)),
-        ]
-
         problems: list[str] = []
-        for dataset, fields in used:
+        for dataset, fields in fields_the_server_uses():
             available = declared_fields(dataset)
             for f in fields:
                 if f not in available:
@@ -1023,6 +1035,66 @@ class TestFieldContract:
 
         assert ORDER_BY_CATALOG.split()[0] == "title"
         assert "metas" not in ORDER_BY_CATALOG
+
+
+@pytest.mark.asyncio
+@pytest.mark.live
+async def test_live_the_recording_still_matches_the_source():
+    """Die Gegenseite zu `TestFieldContract`: hält die Aufzeichnung noch?
+
+    `TestFieldContract` hält den Server gegen `dataset_fields.json` — also
+    gegen eine Aufzeichnung. Wechselt die Quelle einen Feldnamen, wird die
+    Aufzeichnung still falsch: Der Offline-Test bleibt grün, weil er gegen
+    dieselbe veraltete Datei prüft, und die Werkzeuge kassieren produktiv
+    HTTP 400. Genau dieser Zustand bestand am 2026-08-03, und keine der
+    Zusicherungen dieser Datei konnte ihn widerlegen — eine Aufzeichnung kann
+    ihre eigene Veralterung nicht bemerken.
+
+    Nur dieser Test fragt die Quelle. Er läuft in `.github/workflows/live.yml`,
+    nicht in der CI der Pull Requests.
+    """
+    from sbb_opendata_mcp.server import BASE_URL
+
+    datasets = sorted({ds for ds, _ in fields_the_server_uses()})
+
+    live: dict[str, set[str]] = {}
+    async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+        for ds in datasets:
+            response = await client.get(f"{BASE_URL}/{ds}")
+            response.raise_for_status()
+            names = {f["name"] for f in response.json().get("fields", [])}
+            assert names, (
+                f"{ds}: Die Quelle deklariert keine Felder. Ohne Deklaration "
+                "lässt sich kein `select` mehr gegen sie halten — erst die "
+                "Quelle abfragen, dann einordnen."
+            )
+            live[ds] = names
+
+    # 1. Produktiv kaputt: Ein Feld, das der Server verwendet, führt die Quelle
+    #    heute nicht mehr. Jede Anfrage damit endet in HTTP 400.
+    broken = [
+        f"{ds}: '{field}'"
+        for ds, fields in fields_the_server_uses()
+        for field in fields
+        if field not in live[ds]
+    ]
+    assert not broken, (
+        "Feldnamen, die der Server verwendet und die die Quelle NICHT MEHR "
+        "führt. Die Explore-API beantwortet sie mit HTTP 400 — diese Werkzeuge "
+        "sind produktiv kaputt:\n  " + "\n  ".join(broken)
+    )
+
+    # 2. Aufzeichnung veraltet: Ein Feld ist aus der Deklaration verschwunden.
+    #    Der Server verwendet es (noch) nicht, aber jeder Offline-Test prüft ab
+    #    jetzt gegen eine Fiktion.
+    vanished = [f"{ds}: '{field}'" for ds in datasets for field in sorted(declared_fields(ds) - live[ds])]
+    assert not vanished, (
+        "Felder aus `tests/fixtures/dataset_fields.json`, die die Quelle nicht "
+        "mehr führt. Der Server verwendet sie nicht, aber die Aufzeichnung ist "
+        "damit überholt und die Offline-Tests prüfen gegen einen Stand, den es "
+        "nicht mehr gibt. Neu aufzeichnen: `python scripts/record_fixtures.py`"
+        "\n  " + "\n  ".join(vanished)
+    )
 
 
 class TestStationValidity:
