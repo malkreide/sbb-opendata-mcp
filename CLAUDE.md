@@ -45,16 +45,14 @@ Ein Codex-Review auf einem PR wird beantwortet oder behoben, nie ignoriert.
 
 ## Teil 2 — dieses Repo
 
-### ruff-Version: nicht deckungsgleich (Befund)
+### ruff-Version: an drei Stellen, immer dieselbe
 
-| Ort | Version |
-|---|---|
-| `.github/workflows/ci.yml` | `ruff==0.16.1` (gepinnt) |
-| `.pre-commit-config.yaml` | Datei existiert nicht |
-| `pyproject.toml` `[dev]` | `ruff>=0.4.0` (offen) |
+`.github/workflows/ci.yml`, `.pre-commit-config.yaml` und `pyproject.toml`
+(`[dev]` und `[tool.hatch.envs.default]`) nennen alle `0.16.1`. Beim Anheben
+alle drei Dateien anfassen — sonst meldet ruff lokal Abweichungen, die niemand
+verursacht hat, oder es meldet lokal nichts und die CI wird rot.
 
-`pip install -e ".[dev]"` zieht damit irgendein aktuelles ruff, nicht 0.16.1.
-Vor dem Linten lokal explizit `pip install ruff==0.16.1`.
+`pre-commit install` einmal pro Klon, dann fahren die Gates von selbst mit.
 
 ### Gate-Befehle (wörtlich aus `ci.yml`, Reihenfolge = CI; Matrix 3.11/3.12/3.13)
 

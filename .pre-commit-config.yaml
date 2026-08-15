@@ -1,0 +1,18 @@
+# Lokale Gates, mit derselben ruff-Version wie die CI.
+#
+# Der Pin hier, der Pin in .github/workflows/ci.yml und die dev-Extras in
+# pyproject.toml muessen dieselbe Version nennen. Weichen sie ab, meldet
+# ruff lokal Abweichungen, die niemand verursacht hat — oder, schlimmer,
+# es meldet lokal nichts und die CI wird rot. Beim Anheben also alle drei
+# Stellen anfassen.
+#
+# Einrichten:  pre-commit install
+# Alles pruefen: pre-commit run --all-files
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.1
+    hooks:
+      # Reihenfolge wie in ci.yml: erst check, dann format.
+      - id: ruff-check
+      - id: ruff-format
