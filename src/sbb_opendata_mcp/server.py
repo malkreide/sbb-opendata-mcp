@@ -159,6 +159,7 @@ DATASET_LINES = "linie"
 # und die naechste Umbenennung faellt als Testfehler auf statt als HTTP 400 vor
 # einem Nutzer.
 FIELDS_STATIONS = (
+    "bezeichnung_offiziell",
     "designationofficial",  # war: bezeichnung_offiziell
     "number",  # war: uic — die volle UIC-/DIDOK-Nummer, z.B. 8510279
     "numbershort",  # war: dst_nr — die Dienststellennummer, z.B. 10279
