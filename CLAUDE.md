@@ -45,12 +45,15 @@ Ein Codex-Review auf einem PR wird beantwortet oder behoben, nie ignoriert.
 
 ## Teil 2 — dieses Repo
 
-### ruff-Version: an drei Stellen, immer dieselbe
+**ruff: eine Quelle.** Der Pin `0.16.1` steht in `pyproject.toml` (`[dev]`,
+`[tool.hatch.envs.default]`) und `.pre-commit-config.yaml` — und **nicht**
+mehr als eigener Install-Schritt in der CI.
 
-`.github/workflows/ci.yml`, `.pre-commit-config.yaml` und `pyproject.toml`
-(`[dev]` und `[tool.hatch.envs.default]`) nennen alle `0.16.1`. Beim Anheben
-alle drei Dateien anfassen — sonst meldet ruff lokal Abweichungen, die niemand
-verursacht hat, oder es meldet lokal nichts und die CI wird rot.
+Der CI-Schritt lief nach dem Install der Abhängigkeiten und überschrieb sie.
+Eine Abweichung im Pin konnte deshalb in der CI gar nicht auffallen, sondern
+nur lokal — wo niemand sie erwartet. Ein manuelles Nachinstallieren von ruff
+vor den Gates ist damit nicht mehr nötig und wäre schädlich: Es würde eine
+spätere Anhebung hier stillschweigend überstimmen.
 
 `pre-commit install` einmal pro Klon, dann fahren die Gates von selbst mit.
 
@@ -59,7 +62,6 @@ verursacht hat, oder es meldet lokal nichts und die CI wird rot.
 ```sh
 pip install -e ".[dev]"
 PYTHONPATH=src pytest tests/ -m "not live"
-pip install ruff==0.16.1
 ruff check src/ tests/ scripts/
 ruff format --check src/ tests/ scripts/
 python scripts/check_version_sync.py
