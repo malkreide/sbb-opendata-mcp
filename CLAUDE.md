@@ -57,6 +57,21 @@ spätere Anhebung hier stillschweigend überstimmen.
 
 `pre-commit install` einmal pro Klon, dann fahren die Gates von selbst mit.
 
+**«Eine Quelle» sind hier drei Stellen, und kein Gate hält sie zusammen.**
+`pyproject.toml` nennt `ruff==0.16.1` zweimal — im `[dev]`-Extra (Z. 46) und
+in `[tool.hatch.envs.default]` (Z. 64) —, dazu kommt `rev: v0.16.1` in
+`.pre-commit-config.yaml`. Alle drei stimmen heute überein; erzwungen wird das
+von nichts. `scripts/check_version_sync.py` prüft hier nur die Paketversion,
+nicht den ruff-Pin: seine Ausgabe nennt keine ruff-Zeile. (Die Fassung in
+`swiss-electricity-mcp` und `bakom-mcp` kann das und meldet
+`ruff-Pin einig auf 0.16.1 (2 Stellen)` — hier fehlt dieser Teil.)
+
+Die Wartungsnotiz über dem Pin in `pyproject.toml` zeigt zudem in die falsche
+Richtung: Sie verlangt, beim Anheben `ci.yml` und `.pre-commit-config.yaml`
+anzufassen. `ci.yml` installiert aber gar kein ruff mehr — es kommt aus dem
+Extra —, und die Hatch-Umgebung, die einen eigenen Pin trägt, nennt sie nicht.
+Wer der Notiz folgt, hebt zwei von drei Stellen an und lässt die dritte stehen.
+
 ### Gate-Befehle (wörtlich aus `ci.yml`, Reihenfolge = CI; Matrix 3.11/3.12/3.13)
 
 ```sh
