@@ -72,6 +72,9 @@ anzufassen. `ci.yml` installiert aber gar kein ruff mehr — es kommt aus dem
 Extra —, und die Hatch-Umgebung, die einen eigenen Pin trägt, nennt sie nicht.
 Wer der Notiz folgt, hebt zwei von drei Stellen an und lässt die dritte stehen.
 
+Vor dem Lauf `ruff --version` prüfen: ein älteres ruff früher im `PATH`
+schlägt den Pin, ohne dass der Install etwas meldet.
+
 ### Gate-Befehle (wörtlich aus `ci.yml`, Reihenfolge = CI; Matrix 3.11/3.12/3.13)
 
 ```sh
