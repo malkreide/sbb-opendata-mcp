@@ -40,9 +40,12 @@ dependencies = [
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
-    # Exakt gepinnt, damit `pip install -e ".[dev]"` dieselbe Version liefert,
-    # gegen die die CI prueft. Beim Anheben auch .github/workflows/ci.yml und
-    # .pre-commit-config.yaml anfassen.
+    # Exakt gepinnt, und seit diesem Commit die EINZIGE Stelle im Repo, die
+    # eine ruff-Version nennt. `ci.yml` installiert nur dieses Extra,
+    # `[tool.hatch.envs.default]` zieht es ueber `features`, und die
+    # pre-commit-Hooks rufen das ruff aus dem PATH statt ein eigenes `rev:`
+    # mitzubringen. Anheben also genau hier — sonst nirgends.
+    # `tests/test_werkzeug_versionen.py` haelt das fest, statt es zu behaupten.
     "ruff==0.16.1",
 ]
 
@@ -57,12 +60,13 @@ Issues = "https://github.com/malkreide/sbb-opendata-mcp/issues"
 [tool.hatch.build.targets.wheel]
 packages = ["src/sbb_opendata_mcp"]
 
+# Zieht das `dev`-Extra, statt seine Eintraege ein zweites Mal aufzuzaehlen.
+# Vorher standen dieselben drei Pakete hier noch einmal — sie stimmten
+# ueberein, aber nichts erzwang das: Wer den ruff-Pin oben anhebt und diese
+# Liste vergisst, faehrt `hatch run lint` gegen eine andere Version als die
+# CI, ohne dass ein Gate rot wird.
 [tool.hatch.envs.default]
-dependencies = [
-    "pytest>=8.0.0",
-    "pytest-asyncio>=0.23.0",
-    "ruff==0.16.1",
-]
+features = ["dev"]
 
 # Pfade wie in ci.yml — `scripts/` gehoert dazu, sonst ist ein gruenes
 # `hatch run lint` mit einer roten CI vereinbar.

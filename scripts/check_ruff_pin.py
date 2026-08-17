@@ -14,6 +14,13 @@ Portfolio kommen beide vor: `ruff …` nimmt das Binary aus dem PATH,
 dann haengt das Ergebnis davon ab, welche Form gerade jemand tippt. Was nicht
 vorhanden ist, wird uebersprungen; fehlen beide, ist das ein Fehler.
 
+Hier haengt zusaetzlich der pre-commit-Hook daran: die Hooks rufen ruff ueber
+``language: system`` auf, also das, was im PATH liegt. Das ist Absicht - so
+gibt es genau EINEN Pin, den in pyproject.toml, und keine zweite Versionsangabe
+in .pre-commit-config.yaml, die still auseinanderlaufen kann. Der Preis dafuer
+ist, dass der PATH auch ein fremdes ruff liefern kann; dieses Skript ist der
+Ausgleich und laeuft deshalb als erster Hook.
+
 Verwendung:
     python scripts/check_ruff_pin.py     # exit 1 bei Abweichung
 

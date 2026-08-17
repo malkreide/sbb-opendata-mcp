@@ -59,35 +59,38 @@ Ein Codex-Review auf einem PR wird beantwortet oder behoben, nie ignoriert.
 
 ## Teil 2 — dieses Repo
 
-**ruff: eine Quelle.** Der Pin `0.16.1` steht in `pyproject.toml` (`[dev]`,
-`[tool.hatch.envs.default]`) und `.pre-commit-config.yaml` — und **nicht**
-mehr als eigener Install-Schritt in der CI.
+**ruff: eine Quelle — und zwar wörtlich eine.** Der Pin `0.16.1` steht
+ausschliesslich im `[dev]`-Extra von `pyproject.toml`. `ci.yml` installiert
+nur dieses Extra, `[tool.hatch.envs.default]` zieht es über
+`features = ["dev"]`, und die pre-commit-Hooks rufen das ruff aus dem `PATH`
+statt ein eigenes `rev:` mitzubringen. Anheben also genau dort — sonst
+nirgends.
 
-Der CI-Schritt lief nach dem Install der Abhängigkeiten und überschrieb sie.
-Eine Abweichung im Pin konnte deshalb in der CI gar nicht auffallen, sondern
-nur lokal — wo niemand sie erwartet. Ein manuelles Nachinstallieren von ruff
-vor den Gates ist damit nicht mehr nötig und wäre schädlich: Es würde eine
-spätere Anhebung hier stillschweigend überstimmen.
+Bis zu diesem Commit waren es **drei** Stellen: das `[dev]`-Extra, eine eigene
+`dependencies`-Liste in `[tool.hatch.envs.default]` und `rev: v0.16.1` in
+`.pre-commit-config.yaml`. Alle drei nannten dieselbe Version, erzwungen wurde
+das von nichts — und jeder Rückfall wäre still: Er macht kein Gate rot, er
+lässt lokal nur eine andere Version prüfen als die, gegen die die CI prüft.
 
-`pre-commit install` einmal pro Klon, dann fahren die Gates von selbst mit.
+`tests/test_werkzeug_versionen.py` hält das jetzt fest, statt es zu behaupten.
+Sechs Zusicherungen, jede einzeln gegengeprobt: exakter Pin genau einmal, kein
+Workflow installiert ruff selbst, die hatch-Umgebung zählt nicht selbst auf,
+`.pre-commit-config.yaml` nennt keine Version. Der Test läuft im bestehenden
+pytest-Gate; ein neuer CI-Schritt war dafür nicht nötig.
 
-**«Eine Quelle» sind hier drei Stellen, und kein Gate hält sie zusammen.**
-`pyproject.toml` nennt `ruff==0.16.1` zweimal — im `[dev]`-Extra (Z. 46) und
-in `[tool.hatch.envs.default]` (Z. 64) —, dazu kommt `rev: v0.16.1` in
-`.pre-commit-config.yaml`. Alle drei stimmen heute überein; erzwungen wird das
-von nichts. `scripts/check_version_sync.py` prüft hier nur die Paketversion,
-nicht den ruff-Pin: seine Ausgabe nennt keine ruff-Zeile. (Die Fassung in
-`swiss-electricity-mcp` und `bakom-mcp` kann das und meldet
-`ruff-Pin einig auf 0.16.1 (2 Stellen)` — hier fehlt dieser Teil.)
+`language: system` macht eine Lücke auf — der `PATH` kann ein fremdes ruff
+liefern. Dagegen läuft `scripts/check_ruff_pin.py` als **erster** Hook: schlägt
+er fehl, sind die Ergebnisse der beiden ruff-Hooks darunter für die CI nicht
+aussagekräftig. Nachgemessen: mit einem ruff `0.15.8` früher im `PATH` meldet
+er «Version weicht ab» und bricht ab.
 
-Die Wartungsnotiz über dem Pin in `pyproject.toml` zeigt zudem in die falsche
-Richtung: Sie verlangt, beim Anheben `ci.yml` und `.pre-commit-config.yaml`
-anzufassen. `ci.yml` installiert aber gar kein ruff mehr — es kommt aus dem
-Extra —, und die Hatch-Umgebung, die einen eigenen Pin trägt, nennt sie nicht.
-Wer der Notiz folgt, hebt zwei von drei Stellen an und lässt die dritte stehen.
+`pip install -e ".[dev]" && pre-commit install` einmal pro Klon, dann fahren
+die Gates von selbst mit.
 
-Vor dem Lauf `ruff --version` prüfen: ein älteres ruff früher im `PATH`
-schlägt den Pin, ohne dass der Install etwas meldet.
+`scripts/check_version_sync.py` prüft hier nur die Paketversion, nicht den
+ruff-Pin: seine Ausgabe nennt keine ruff-Zeile. (Die Fassung in
+`swiss-electricity-mcp` und `bakom-mcp` kann das — hier übernimmt das der
+Test statt des Skripts.)
 
 ### Gate-Befehle (wörtlich aus `ci.yml`, Reihenfolge = CI; Matrix 3.11/3.12/3.13)
 
