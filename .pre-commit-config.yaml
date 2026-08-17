@@ -1,18 +1,57 @@
 # Lokale Gates, mit derselben ruff-Version wie die CI.
 #
-# Der Pin hier, der Pin in .github/workflows/ci.yml und die dev-Extras in
-# pyproject.toml muessen dieselbe Version nennen. Weichen sie ab, meldet
-# ruff lokal Abweichungen, die niemand verursacht hat — oder, schlimmer,
-# es meldet lokal nichts und die CI wird rot. Beim Anheben also alle drei
-# Stellen anfassen.
+# Der Pin steht an EINER Stelle: `ruff==X.Y.Z` im `dev`-Extra von
+# pyproject.toml. Hier stand frueher ein zweiter als `rev:` von
+# `ruff-pre-commit`, und `[tool.hatch.envs.default]` zaehlte einen dritten auf.
+# Die drei stimmten ueberein, aber nichts erzwang das — und ein Auseinander-
+# laufen waere still: Es macht kein Gate rot, es laesst lokal nur eine andere
+# Version pruefen als die, gegen die die CI prueft.
 #
-# Einrichten:  pre-commit install
+# (Der Kommentar hier nannte frueher `.github/workflows/ci.yml` als dritte
+# Stelle. Dort steht gar kein Pin — die CI installiert das dev-Extra. Wer den
+# Hinweisen folgte, haette also eine Stelle gesucht, die es nicht gibt, und
+# eine uebersehen, die es gab.)
+#
+# Deshalb `repo: local` mit `language: system`: die Hooks rufen das ruff aus
+# dem PATH, also das aus `pip install -e ".[dev]"`. Der Preis dafuer ist, dass
+# der PATH auch ein fremdes ruff liefern kann — dagegen laeuft
+# `scripts/check_ruff_pin.py` als erster Hook.
+#
+# Einrichten:  pip install -e ".[dev]" && pre-commit install
 # Alles pruefen: pre-commit run --all-files
 
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.1
+  - repo: local
     hooks:
+      # Muss zuerst laufen: schlaegt er fehl, sind die Ergebnisse der beiden
+      # ruff-Hooks darunter nicht aussagekraeftig fuer die CI.
+      - id: ruff-version-pin
+        name: ruff-Version entspricht dem Pin in pyproject.toml
+        entry: python3 scripts/check_ruff_pin.py
+        language: system
+        pass_filenames: false
+        always_run: true
+
       # Reihenfolge wie in ci.yml: erst check, dann format.
+      #
+      # `files:` deckungsgleich mit dem CI-Scope `src/ tests/ scripts/`. Der
+      # frueher benutzte `ruff-pre-commit` brachte kein `files:` mit und sah
+      # damit das ganze Repo — weiter als die CI. Das ist die harmlosere
+      # Richtung (lokal rot, CI gruen), aber es war trotzdem ein anderes Gate.
       - id: ruff-check
+        name: ruff check
+        entry: ruff check
+        language: system
+        types_or: [python, pyi]
+        files: ^(src|tests|scripts)/
+
+      # Schreibt um, statt nur zu melden — wie der abgeloeste
+      # `ruff-pre-commit`-Hook. Das Verhalten bleibt damit unveraendert; hier
+      # wechselt nur die Herkunft der Binary. Die CI faehrt weiterhin
+      # `--check`, weil sie melden und nicht umschreiben soll.
       - id: ruff-format
+        name: ruff format
+        entry: ruff format
+        language: system
+        types_or: [python, pyi]
+        files: ^(src|tests|scripts)/
