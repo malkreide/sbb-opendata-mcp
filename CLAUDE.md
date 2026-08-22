@@ -138,7 +138,7 @@ wie der Code: Nichts ist rot, weil nichts geprüft wird, worauf es ankommt.
 
 ## Teil 2 — dieses Repo
 
-**ruff: eine Quelle — und zwar wörtlich eine.** Der Pin `0.16.1` steht
+**ruff: eine Quelle — und zwar wörtlich eine.** Der Pin `0.16.3` steht
 ausschliesslich im `[dev]`-Extra von `pyproject.toml`. `ci.yml` installiert
 nur dieses Extra, `[tool.hatch.envs.default]` zieht es über
 `features = ["dev"]`, und die pre-commit-Hooks rufen das ruff aus dem `PATH`
@@ -146,7 +146,7 @@ statt ein eigenes `rev:` mitzubringen. Anheben also genau dort — sonst
 nirgends.
 
 Bis zu diesem Commit waren es **drei** Stellen: das `[dev]`-Extra, eine eigene
-`dependencies`-Liste in `[tool.hatch.envs.default]` und `rev: v0.16.1` in
+`dependencies`-Liste in `[tool.hatch.envs.default]` und `rev: v0.16.3` in
 `.pre-commit-config.yaml`. Alle drei nannten dieselbe Version, erzwungen wurde
 das von nichts — und jeder Rückfall wäre still: Er macht kein Gate rot, er
 lässt lokal nur eine andere Version prüfen als die, gegen die die CI prüft.
