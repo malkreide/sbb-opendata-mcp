@@ -304,11 +304,44 @@ denn ein Live-Lauf hat drei Antworten, nicht zwei:
 |---|---|
 | `clear` | Suite lief, alles grün — nur hier geht ein Issue zu |
 | `finding` | Suite lief, etwas fiel — Issue auf |
-| `unknown` | Suite lief **nicht** (Install kaputt, Marke umbenannt, alles übersprungen) |
+| `unknown` | Suite lief **nicht** (Install kaputt, Marke umbenannt, alles übersprungen) — und ebenso: die Quelle hat nicht geantwortet |
 
 `unknown` ist der Fall, der ohne Klassifikator verlorengeht: pytest endet mit
 0, wenn jeder Test übersprungen wurde. Ein Job, der das als grün bucht,
 schliesst ein offenes Issue mit einem Vergleich, den es nie gab.
+
+Die dritte Antwort hat zwei Wege hinein, und der zweite wurde lange übersehen.
+Am 26.8.2026 lief `test_live_search_waedenswil` ins 30-s-Zeitlimit; der Lauf
+wurde `finding` und Issue #48 behauptete, der Vertrag habe sich geändert.
+Nachgemessen am Tag darauf, gleiche Anfrage: sechs Läufe, 0.44–0.80 s, HTTP 200.
+Der Docstring des Klassifikators nannte «ein Timeout» schon als `unknown` — nur
+kam ein Timeout *innerhalb* eines Tests nie dort an, sondern als Fehlschlag.
+
+**Keine Antwort ist kein Befund.** Timeout, Verbindungsabbruch, 429 und 5xx
+heissen: Die Quelle hat nichts gesagt, und über den Feld-Vertrag folgt daraus
+weder das eine noch das andere. `live_attempt()` wiederholt sie dreimal und
+überspringt danach mit `SOURCE_UNAVAILABLE` im Grund; der Klassifikator liest
+den Marker und antwortet `unknown`.
+
+Die Grenze ist die ganze Sache: **HTTP 400 und 404 sind Antworten** und bleiben
+Fehlschläge. 400 ist genau die vom 3.8.2026, als die Quelle einen Feldnamen
+wechselte. Verschluckt diese Mechanik sie, verschluckt sie den Fehler,
+dessentwegen die Live-Suite existiert — deshalb ist die Gegenprobe dazu
+(`test_a_findings_status_is_never_swallowed`) wichtiger als die Mechanik selbst.
+
+Und ein Skip heisst nicht immer dasselbe: «Vorbedingung nicht erfüllt» ist eine
+Entscheidung im Test und lässt den Rest des Laufs gültig, «Quelle weg» heisst,
+dass dieser Teil nicht verglichen wurde. Wer beide gleich behandelt, muss sich
+zwischen zwei Fehlern entscheiden — jede bewusste Vorbedingung zum Ausfall
+erklären, oder einen echten Ausfall grün buchen. Der Marker trennt sie; beide
+Richtungen sind gegengeprobt.
+
+Ein Nebenbefund derselben Simulation, und er zeigt, wozu sie taugt: Fünf Tests
+übersprangen, `test_live_list_datasets` lief grün durch — das Werkzeug trug die
+Basis-URL als **zweites Literal** und zeigte als einziges nicht dorthin, wohin
+`BASE_URL` zeigt. Zwei Kopien derselben Adresse fallen nicht auf, solange beide
+gleich lauten, und beim Umzug fällt die zweite still aus, weil die alte Adresse
+ja antwortet.
 
 GitHub schaltet geplante Workflows nach 60 Tagen ohne Repo-Aktivität ab. Bei
 einem ruhenden Repo ist ein grünes `live.yml` also unter Umständen gar keine

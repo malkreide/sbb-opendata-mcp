@@ -5,6 +5,51 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Behoben — ein Timeout ist kein gebrochener Vertrag
+
+Am 26.8.2026 lief `test_live_search_waedenswil` in das 30-s-Zeitlimit. Der Lauf
+wurde `finding`, `live.yml` machte Issue #48 auf und schrieb hinein, der Vertrag
+mit `data.sbb.ch` habe sich geaendert. Nachgemessen am 27.8.2026 mit genau
+derselben Anfrage: sechs Laeufe, 0.44 bis 0.80 s, HTTP 200. Es hatte sich nichts
+geaendert — die Quelle hatte einmal nicht geantwortet, und der Lauf hat darueber
+**nichts** festgestellt.
+
+Der Klassifikator kannte den Fall und nannte ihn im eigenen Docstring («ein
+Timeout: alles `unknown`»). Nur kam ein Timeout *innerhalb* eines Tests nie dort
+an, sondern als Fehlschlag — und ein Fehlschlag heisst `finding`. Genau die
+Verwechslung, gegen die die drei Antworten gebaut wurden, nur eine Ebene tiefer.
+
+- `_is_source_unavailable()` zieht die Grenze: Timeout, Verbindungsabbruch, 429
+  und 5xx heissen «keine Antwort». HTTP 400 und 404 sind **Antworten** und
+  bleiben Befunde — 400 ist die vom 3.8.2026, als die Quelle einen Feldnamen
+  wechselte. Ein Werkzeug-Resultat traegt das Ergebnis als
+  `upstream_unavailable`.
+- `live_attempt()` wiederholt eine ausgebliebene Antwort dreimal (2 s, 5 s) und
+  ueberspringt danach mit `SOURCE_UNAVAILABLE` im Grund. Ein `AssertionError`,
+  ein 400 und ein 404 werden **nie** wiederholt und nie uebersprungen.
+- Der Klassifikator liest den Marker und antwortet `unknown` statt `clear`. Der
+  Job bleibt rot, aber es geht kein Issue auf, das einen Vergleich behauptet,
+  den es nicht gab, und keines zu, das nie verglichen wurde.
+
+Der bewusste Skip bleibt davon unberuehrt und gruen: Zwei Skips mit
+gegensaetzlicher Bedeutung trennen sich nur am Grund, nicht an der Zahl. Beide
+Richtungen sind gegengeprobt — «jeder Skip ist ein Ausfall» faellt genauso wie
+«kein Skip ist einer».
+
+Nachgemessen statt behauptet: Mit unerreichbar gesetzter Basis-URL uebersprang
+die Live-Suite alle sechs Tests, und `scripts/classify_live_run.py` antwortete
+`unknown` mit «die Quelle hat bei 6 von 6 Test(s) nicht geantwortet».
+
+### Behoben — die Basis-URL stand zweimal
+
+Aufgefallen bei genau dieser Simulation: Fuenf Live-Tests uebersprangen,
+`test_live_list_datasets` lief gruen durch. Das Werkzeug trug die Adresse der
+Quelle als zweites Literal und zeigte damit als einziges nicht auf das, was
+`BASE_URL` sagt. Solange beide gleich lauten, faellt das nicht auf — und beim
+naechsten Umzug faellt es still aus, weil die alte Adresse ja antwortet.
+`sbb_list_datasets` nimmt jetzt `BASE_URL`, und ein Test haelt fest, dass das
+Literal genau einmal vorkommt.
+
 ### Hinzugefuegt
 
 - **Frischehinweise auf `tools/list` und `server/discover`** (SEP-2549, Spec

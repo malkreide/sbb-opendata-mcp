@@ -31,6 +31,26 @@ offenes Issue haette er zugemacht, mit einem Vergleich, den es nie gab.
 `tests - skipped == 0` ist deshalb `unknown` und nicht `clear`. Ein Secret, das
 niemand gesetzt hat, ist kein gruener Vertrag mit der Quelle; es ist gar keiner.
 
+ZWEI SKIPS, GEGENSAETZLICHE BEDEUTUNG
+-------------------------------------
+Ein Skip heisst nicht immer dasselbe. «Vorbedingung nicht erfuellt» ist eine
+Entscheidung im Test und laesst den Rest des Laufs gueltig. «Die Quelle hat
+nicht geantwortet» heisst dagegen, dass genau dieser Teil des Vertrags heute
+nicht verglichen wurde.
+
+Am 26.8.2026 lief `test_live_search_waedenswil` in das 30-s-Zeitlimit. Der
+Fehlschlag wurde `finding`, und `live.yml` machte Issue #48 auf mit dem Satz,
+der Vertrag mit der Quelle habe sich geaendert. Nachgemessen am 27.8.2026 mit
+derselben Anfrage: sechs Laeufe, 0.44 bis 0.80 s, HTTP 200 — es hatte sich
+nichts geaendert. Der Docstring hier nannte den Fall laengst («ein Timeout:
+alles `unknown`»); nur kam ein Timeout *innerhalb* eines Tests nie als Timeout
+an, sondern als Fehlschlag.
+
+Die Live-Suite schreibt deshalb `SOURCE_UNAVAILABLE` in den Skip-Grund, wenn
+die Quelle nach mehreren Versuchen nicht geantwortet hat, und dieser Marker
+macht den Lauf `unknown` statt `clear`. Beides ist rot — aber `unknown` macht
+kein Issue auf und schliesst keines.
+
 DIE QUELLE IST DAS JUNIT-XML, NICHT DER EXIT-CODE
 -------------------------------------------------
 Der Exit-Code von pytest sagt 0 fuer «alles gruen» und fuer «alles
@@ -57,6 +77,23 @@ from pathlib import Path
 CLEAR = "clear"
 FINDING = "finding"
 UNKNOWN = "unknown"
+
+# Marker, mit dem ein Live-Test sagt: Ich habe uebersprungen, weil die Quelle
+# nicht geantwortet hat — nicht, weil eine Vorbedingung fehlte.
+#
+# Ohne diese Unterscheidung sind beide Skips dasselbe Zeichen mit
+# gegensaetzlicher Bedeutung. Ein bewusster Skip ist eine Entscheidung im Test
+# und laesst den Rest des Laufs gueltig; ein Ausfall-Skip heisst, dass genau
+# dieser Teil des Vertrags heute **nicht** verglichen wurde. Wer beide gleich
+# behandelt, muss sich zwischen zwei Fehlern entscheiden: jeden bewussten Skip
+# zum Ausfall erklaeren, oder einen echten Ausfall als gruen verbuchen und ein
+# offenes Issue mit einem Vergleich schliessen, den es nicht gab.
+#
+# Die Live-Suite importiert diese Konstante aus diesem Modul, statt den Text
+# ein zweites Mal zu schreiben: Zwei Kopien liefen sonst auseinander, und zwar
+# still — der Marker stuende noch im Skip-Grund, waehrend hier schon ein
+# anderer gesucht wuerde.
+SOURCE_UNAVAILABLE = "QUELLE-NICHT-ERREICHBAR"
 
 
 def classify(report: Path, pytest_exit: int | None = None) -> tuple[str, str]:
@@ -85,6 +122,15 @@ def classify(report: Path, pytest_exit: int | None = None) -> tuple[str, str]:
         total("errors"),
         total("skipped"),
     )
+    # `message` ist das Attribut, in das pytest den Skip-Grund schreibt; der
+    # Elementtext wiederholt ihn mit Datei und Zeile davor. Gelesen werden
+    # beide, damit der Marker auch dann traegt, wenn eine pytest-Version nur
+    # noch eines von beiden fuellt.
+    unavailable = sum(
+        1
+        for el in root.iter("skipped")
+        if SOURCE_UNAVAILABLE in (el.get("message") or "") or SOURCE_UNAVAILABLE in (el.text or "")
+    )
 
     if failures or errors:
         return (
@@ -96,6 +142,19 @@ def classify(report: Path, pytest_exit: int | None = None) -> tuple[str, str]:
             UNKNOWN,
             "null Tests eingesammelt — die Marke oder die Dateien haben sich "
             "bewegt, und ein Erfolg ohne Test ist kein Erfolg",
+        )
+    # Vor «alles uebersprungen»: Beide Antworten sind `unknown`, aber nur eine
+    # von beiden nennt den Grund richtig. Steht die generische zuerst, liest im
+    # Job-Log bei einem Totalausfall der Quelle «meist ein fehlendes Secret».
+    if unavailable:
+        # Nicht `finding`: Es ist nichts gefallen, also gibt es nichts zu
+        # melden. Nicht `clear`: Ein Teil des Vertrags wurde heute nicht
+        # verglichen, und ein Issue, das darauf zugeht, behauptet mehr als der
+        # Lauf hergibt. Sichtbar wird der Ausfall ueber den roten Job.
+        return (
+            UNKNOWN,
+            f"die Quelle hat bei {unavailable} von {tests} Test(s) nicht geantwortet — "
+            f"{tests - skipped} Test(s) liefen, der Rest des Vertrags blieb ungeprueft",
         )
     if tests - skipped == 0:
         return (
