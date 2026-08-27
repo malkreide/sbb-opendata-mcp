@@ -17,9 +17,11 @@ Veralterung nicht bemerken. Das tut nur sein Gegenstück
 `test_live_the_recording_still_matches_the_source` (`-m live`).
 """
 
+import asyncio
 import json
 import logging
 import os
+import pathlib
 import sys
 from unittest.mock import AsyncMock, patch
 
@@ -28,6 +30,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import httpx
+from mcp.types import CallToolResult, TextContent
 
 from sbb_opendata_mcp.server import (
     CompareStationsInput,
@@ -40,6 +43,7 @@ from sbb_opendata_mcp.server import (
     StationSearchInput,
     TrainsPerSegmentInput,
     _handle_api_error,
+    _is_source_unavailable,
     _pagination_meta,
     _to_number,
     sbb_compare_stations,
@@ -888,13 +892,97 @@ class TestStructuredOutput:
 # ---------------------------------------------------------------------------
 # Live API Smoke Tests (require network)
 # ---------------------------------------------------------------------------
+#
+# «Die Quelle hat nicht geantwortet» ist kein Befund
+# --------------------------------------------------
+# Am 26.8.2026 lief `test_live_search_waedenswil` in das 30-s-Zeitlimit. Der
+# Lauf wurde `finding`, `live.yml` machte Issue #48 auf und schrieb hinein, der
+# Vertrag mit der Quelle habe sich geaendert. Nachgemessen am 27.8.2026 mit
+# genau derselben Anfrage: sechs Laeufe, 0.44 bis 0.80 s, HTTP 200. Es hatte
+# sich nichts geaendert — die Quelle hatte einmal nicht geantwortet, und der
+# Lauf hat darueber nichts festgestellt.
+#
+# Der Klassifikator kennt diesen Fall laengst und nennt ihn im eigenen
+# Docstring: «Ein gescheitertes `pip install`, ein Timeout, eine umbenannte
+# Marke: alles `unknown`». Nur kam ein Timeout *innerhalb* eines Tests nie dort
+# an, sondern als Fehlschlag — und ein Fehlschlag heisst `finding`.
+#
+# Deshalb hier: Ein Transportfehler wird ein paar Mal wiederholt und danach zum
+# Skip mit `SOURCE_UNAVAILABLE` im Grund. Der Klassifikator liest den Marker und
+# antwortet `unknown` — der Job bleibt rot, aber es geht kein Issue auf, das
+# einen Vergleich behauptet, den es nicht gab.
+#
+# Was hier ausdruecklich NICHT wiederholt und NICHT uebersprungen wird: HTTP
+# 400 und 404. Beides sind Antworten der Quelle, und 400 ist genau die vom
+# 3.8.2026, als sie einen Feldnamen wechselte. Wuerde diese Mechanik sie
+# verschlucken, verschluckte sie den Fehler, dessentwegen die Live-Suite
+# existiert. `_is_source_unavailable` zieht die Grenze, und
+# `TestLiveAttempt` haelt sie fest.
+
+# `scripts/` liegt nicht auf dem Pfad, den pytest fuer `tests/` setzt.
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+
+from classify_live_run import SOURCE_UNAVAILABLE  # noqa: E402
+
+# Drei Versuche, dazwischen 2 s und 5 s. Genug, um einen einzelnen Aussetzer zu
+# ueberstehen, und kurz genug, dass ein echter Ausfall den Job nicht ins
+# 10-Minuten-Limit von `live.yml` laufen laesst.
+LIVE_ATTEMPTS = 3
+LIVE_BACKOFF_S = (2.0, 5.0)
+
+# Modul-Alias, kein `asyncio.sleep` zur Laufzeit: Ein Test, der
+# `monkeypatch.setattr(modul.asyncio, "sleep", ...)` schreibt, greift ins Modul
+# `asyncio` selbst und entschaerft das Schlafen im ganzen Prozess — auch dort,
+# wo es gerade die Mechanik ist, die geprueft werden soll. Ersetzt wird deshalb
+# dieser Name hier.
+_sleep = asyncio.sleep
+
+
+async def live_attempt(probe, *, attempts: int = LIVE_ATTEMPTS, backoff=LIVE_BACKOFF_S):
+    """Fuehrt `probe()` gegen die echte Quelle aus; Transportfehler → Skip.
+
+    `probe` ist eine parameterlose Koroutine. Sie darf auf zwei Arten melden,
+    dass die Quelle nicht geantwortet hat:
+
+    * mit einer Ausnahme (die Werkzeuge des Servers fangen sie, der
+      Aufzeichnungs-Test nicht), oder
+    * mit einem Werkzeug-Resultat, dessen `structured_content` das Feld
+      `upstream_unavailable` auf `True` traegt.
+
+    Alles andere — ein `AssertionError`, ein HTTP 400, ein HTTP 404 — geht
+    unveraendert nach oben durch und faellt als Fehlschlag auf. Das ist der
+    Punkt: Wiederholt wird nur, was nichts ueber den Vertrag aussagt.
+    """
+    for attempt in range(1, attempts + 1):
+        detail: str
+        try:
+            result = await probe()
+        except Exception as exc:  # noqa: BLE001 — die Einordnung macht `_is_source_unavailable`
+            if not _is_source_unavailable(exc):
+                raise
+            detail = f"{type(exc).__name__}: {exc}"
+        else:
+            structured = getattr(result, "structured_content", None) or {}
+            if not structured.get("upstream_unavailable"):
+                return result
+            detail = str(structured.get("error", "")).strip()
+
+        if attempt < attempts:
+            await _sleep(backoff[min(attempt - 1, len(backoff) - 1)])
+
+    pytest.skip(
+        f"{SOURCE_UNAVAILABLE}: data.sbb.ch hat in {attempts} Versuchen nicht "
+        f"geantwortet ({detail}). Ueber den Feld-Vertrag sagt dieser Lauf nichts."
+    )
 
 
 @pytest.mark.asyncio
 @pytest.mark.live
 async def test_live_zurich_hb_frequency():
     """Live-Test: Passagierfrequenz Zürich HB 2024."""
-    result = await sbb_get_passenger_frequency(PassengerFrequencyInput(station_name="Zürich HB", year="2024"))
+    result = await live_attempt(
+        lambda: sbb_get_passenger_frequency(PassengerFrequencyInput(station_name="Zürich HB", year="2024"))
+    )
     assert "Zürich HB" in _text(result)
     assert "2024" in _text(result)
     assert "410" in _text(result)  # ca. 410'000 DTV
@@ -904,7 +992,7 @@ async def test_live_zurich_hb_frequency():
 @pytest.mark.live
 async def test_live_rail_disruptions():
     """Live-Test: Aktuelle Bahnverkehrsmeldungen."""
-    result = await sbb_get_rail_disruptions(RailDisruptionsInput(limit=5))
+    result = await live_attempt(lambda: sbb_get_rail_disruptions(RailDisruptionsInput(limit=5)))
     assert isinstance(_text(result), str)
     assert len(_text(result)) > 50
 
@@ -913,7 +1001,7 @@ async def test_live_rail_disruptions():
 @pytest.mark.live
 async def test_live_list_datasets():
     """Live-Test: Alle Datensätze auflisten."""
-    result = await sbb_list_datasets()
+    result = await live_attempt(sbb_list_datasets)
     assert "passagierfrequenz" in _text(result).lower()
     assert "SBB" in _text(result)
 
@@ -922,7 +1010,9 @@ async def test_live_list_datasets():
 @pytest.mark.live
 async def test_live_compare_zurich_bern():
     """Live-Test: Vergleich Zürich HB vs. Bern."""
-    result = await sbb_compare_stations(CompareStationsInput(stations=["Zürich HB", "Bern"], year="2024"))
+    result = await live_attempt(
+        lambda: sbb_compare_stations(CompareStationsInput(stations=["Zürich HB", "Bern"], year="2024"))
+    )
     assert "Zürich HB" in _text(result) or "Bern" in _text(result)
 
 
@@ -930,8 +1020,255 @@ async def test_live_compare_zurich_bern():
 @pytest.mark.live
 async def test_live_search_waedenswil():
     """Live-Test: Haltestellensuche Wädenswil."""
-    result = await sbb_search_stations(StationSearchInput(query="Wädenswil", canton="ZH"))
+    result = await live_attempt(
+        lambda: sbb_search_stations(StationSearchInput(query="Wädenswil", canton="ZH"))
+    )
     assert "Wädenswil" in _text(result)
+
+
+# ---------------------------------------------------------------------------
+# Hat die Quelle geantwortet? — die Grenze zwischen Ausfall und Befund
+# ---------------------------------------------------------------------------
+
+
+def _status_error(status: int) -> httpx.HTTPStatusError:
+    resp = AsyncMock()
+    resp.status_code = status
+    resp.text = ""
+    return httpx.HTTPStatusError(str(status), request=AsyncMock(), response=resp)
+
+
+class TestIsSourceUnavailable:
+    """Ohne Antwort kein Befund — aber eine Antwort ist auch dann eine, wenn sie 400 heisst."""
+
+    @pytest.mark.parametrize(
+        "exc",
+        [
+            httpx.TimeoutException("Zeitlimit"),
+            httpx.ConnectTimeout("Zeitlimit beim Verbinden"),
+            httpx.ReadTimeout("Zeitlimit beim Lesen"),
+            httpx.ConnectError("Verbindung abgelehnt"),
+            httpx.RemoteProtocolError("Server hat die Verbindung abgebrochen"),
+            _status_error(429),
+            _status_error(500),
+            _status_error(502),
+            _status_error(503),
+        ],
+    )
+    def test_no_answer_from_the_source(self, exc):
+        assert _is_source_unavailable(exc) is True
+
+    @pytest.mark.parametrize("status", [400, 404, 401, 403, 422])
+    def test_an_answer_is_an_answer(self, status):
+        """HTTP 400 ist der Befund vom 3.8.2026 und darf nie als Ausfall gelten.
+
+        Ginge er hier als «Quelle war weg» durch, wuerde `live_attempt` ihn
+        ueberspringen — und die Live-Suite verlore genau den Fall, fuer den es
+        sie gibt.
+        """
+        assert _is_source_unavailable(_status_error(status)) is False
+
+    def test_our_own_bug_is_not_the_sources_fault(self):
+        assert _is_source_unavailable(ValueError("boom")) is False
+        assert _is_source_unavailable(KeyError("designationofficial")) is False
+
+    @pytest.mark.asyncio
+    async def test_the_flag_reaches_the_tool_result(self):
+        """`live_attempt` liest das Feld — also muss ein Werkzeug es setzen."""
+        with patch(
+            "sbb_opendata_mcp.server._fetch_records",
+            new_callable=AsyncMock,
+            side_effect=httpx.TimeoutException("Zeitlimit"),
+        ):
+            timed_out = await sbb_search_stations(StationSearchInput(query="Wädenswil"))
+        assert timed_out.structured_content["upstream_unavailable"] is True
+
+        with patch(
+            "sbb_opendata_mcp.server._fetch_records",
+            new_callable=AsyncMock,
+            side_effect=_status_error(400),
+        ):
+            bad_field = await sbb_search_stations(StationSearchInput(query="Wädenswil"))
+        assert bad_field.structured_content["upstream_unavailable"] is False
+
+
+class TestOneBaseUrl:
+    """Die Adresse der Quelle steht genau einmal.
+
+    Aufgefallen beim simulierten Ausfall am 27.8.2026: Fuenf Live-Tests
+    uebersprangen, `test_live_list_datasets` lief gruen durch. Das Werkzeug
+    trug die Basis-URL als zweites Literal und zeigte damit als einziges nicht
+    auf das, was `BASE_URL` sagt. Solange beide gleich lauten, faellt das nicht
+    auf — genau das ist das Problem.
+    """
+
+    def test_the_address_appears_once(self):
+        from sbb_opendata_mcp.server import BASE_URL
+
+        source = (
+            pathlib.Path(__file__).resolve().parents[1] / "src" / "sbb_opendata_mcp" / "server.py"
+        ).read_text(encoding="utf-8")
+        assert source.count(f'"{BASE_URL}"') == 1, (
+            "Die Basis-URL steht mehr als einmal als Literal in server.py. "
+            "Zwei Kopien laufen beim naechsten Umzug auseinander, und die "
+            "zweite faellt nicht auf, weil sie ja antwortet."
+        )
+
+
+class TestLiveAttempt:
+    """Wiederholt wird nur, was nichts ueber den Vertrag aussagt."""
+
+    @staticmethod
+    def _no_sleeping(monkeypatch) -> list[float]:
+        """Ersetzt den Modul-Alias, nicht `asyncio.sleep`.
+
+        `monkeypatch.setattr(modul.asyncio, "sleep", ...)` griffe ins Modul
+        `asyncio` selbst und entschaerfte das Schlafen im ganzen Prozess.
+        """
+        slept: list[float] = []
+
+        async def fake(seconds: float) -> None:
+            slept.append(seconds)
+
+        monkeypatch.setattr(sys.modules[__name__], "_sleep", fake)
+        return slept
+
+    @staticmethod
+    def _unavailable() -> CallToolResult:
+        msg = "Fehler: Anfrage hat Zeitlimit überschritten (30s). Bitte erneut versuchen."
+        return CallToolResult(
+            content=[TextContent(type="text", text=msg)],
+            structuredContent={"error": msg, "upstream_unavailable": True},
+        )
+
+    @staticmethod
+    def _ok() -> CallToolResult:
+        return CallToolResult(
+            content=[TextContent(type="text", text="Wädenswil")],
+            structuredContent={"total_count": 1},
+        )
+
+    @pytest.mark.asyncio
+    async def test_a_good_answer_passes_through_without_waiting(self, monkeypatch):
+        slept = self._no_sleeping(monkeypatch)
+        calls = []
+
+        async def probe():
+            calls.append(1)
+            return self._ok()
+
+        result = await live_attempt(probe)
+        assert _text(result) == "Wädenswil"
+        assert len(calls) == 1
+        assert slept == []
+
+    @pytest.mark.asyncio
+    async def test_a_single_hiccup_does_not_decide_the_day(self, monkeypatch):
+        """Der Fall vom 26.8.2026: einmal keine Antwort, danach wieder da."""
+        slept = self._no_sleeping(monkeypatch)
+        answers = [self._unavailable(), self._ok()]
+
+        async def probe():
+            return answers.pop(0)
+
+        result = await live_attempt(probe)
+        assert _text(result) == "Wädenswil"
+        assert answers == []
+        assert slept == [LIVE_BACKOFF_S[0]]
+
+    @pytest.mark.asyncio
+    async def test_a_lasting_outage_is_skipped_not_failed(self, monkeypatch):
+        slept = self._no_sleeping(monkeypatch)
+        calls = []
+
+        async def probe():
+            calls.append(1)
+            return self._unavailable()
+
+        with pytest.raises(BaseException) as caught:  # noqa: B017 — `Skipped` erbt von BaseException
+            await live_attempt(probe)
+
+        assert caught.typename == "Skipped"
+        assert SOURCE_UNAVAILABLE in str(caught.value)
+        assert len(calls) == LIVE_ATTEMPTS
+        assert slept == list(LIVE_BACKOFF_S)
+
+    @pytest.mark.asyncio
+    async def test_an_exception_counts_as_no_answer_too(self, monkeypatch):
+        """Der Aufzeichnungs-Test faengt nichts ab — dort kommt die Ausnahme roh an."""
+        self._no_sleeping(monkeypatch)
+
+        async def probe():
+            raise httpx.ConnectTimeout("Zeitlimit beim Verbinden")
+
+        with pytest.raises(BaseException) as caught:  # noqa: B017
+            await live_attempt(probe)
+        assert caught.typename == "Skipped"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("status", [400, 404])
+    async def test_a_findings_status_is_never_swallowed(self, monkeypatch, status):
+        """Die Gegenprobe zum ganzen Abschnitt.
+
+        Wuerde `live_attempt` auch hier ueberspringen, waere der Preis fuer
+        einen ruhigen Montag der Befund vom 3.8.2026: vier von sechs
+        Datensaetzen produktiv kaputt, Live-Suite gruen.
+        """
+        self._no_sleeping(monkeypatch)
+        calls = []
+
+        async def probe():
+            calls.append(1)
+            raise _status_error(status)
+
+        with pytest.raises(httpx.HTTPStatusError):
+            await live_attempt(probe)
+        assert len(calls) == 1, "ein Befund gehoert nicht wiederholt"
+
+    @pytest.mark.asyncio
+    async def test_a_broken_contract_is_never_swallowed(self, monkeypatch):
+        self._no_sleeping(monkeypatch)
+        calls = []
+
+        async def probe():
+            calls.append(1)
+            raise AssertionError("Feld 'designationofficial' fehlt")
+
+        with pytest.raises(AssertionError, match="designationofficial"):
+            await live_attempt(probe)
+        assert len(calls) == 1
+
+    @pytest.mark.asyncio
+    async def test_the_classifier_understands_the_skip_reason(self, monkeypatch, tmp_path):
+        """Die beiden Haelften, aneinandergehalten.
+
+        Der Marker steht einmal in `scripts/classify_live_run.py` und wird hier
+        importiert. Dieser Test faehrt den echten Skip-Grund durch den echten
+        Klassifikator — als zwei Kopien liefen ausgerechnet die beiden Stellen
+        auseinander, die zusammenpassen muessen.
+        """
+        import classify_live_run as clr
+
+        self._no_sleeping(monkeypatch)
+
+        async def probe():
+            return self._unavailable()
+
+        with pytest.raises(BaseException) as caught:  # noqa: B017
+            await live_attempt(probe)
+        reason = str(caught.value)
+
+        report = tmp_path / "live-report.xml"
+        report.write_text(
+            '<?xml version="1.0" encoding="utf-8"?>'
+            '<testsuites><testsuite name="pytest" tests="6" failures="0" errors="0" skipped="1">'
+            '<testcase classname="tests.test_server" name="test_live_search_waedenswil">'
+            f'<skipped type="pytest.skip" message="{reason}">{reason}</skipped>'
+            "</testcase></testsuite></testsuites>",
+            encoding="utf-8",
+        )
+        state, _ = clr.classify(report)
+        assert state == clr.UNKNOWN, "ein Ausfall darf kein offenes Issue schliessen"
 
 
 # ---------------------------------------------------------------------------
@@ -1057,18 +1394,32 @@ async def test_live_the_recording_still_matches_the_source():
 
     datasets = sorted({ds for ds, _ in fields_the_server_uses()})
 
-    live: dict[str, set[str]] = {}
-    async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
-        for ds in datasets:
-            response = await client.get(f"{BASE_URL}/{ds}")
-            response.raise_for_status()
-            names = {f["name"] for f in response.json().get("fields", [])}
-            assert names, (
-                f"{ds}: Die Quelle deklariert keine Felder. Ohne Deklaration "
-                "lässt sich kein `select` mehr gegen sie halten — erst die "
-                "Quelle abfragen, dann einordnen."
-            )
-            live[ds] = names
+    async def probe() -> dict[str, set[str]]:
+        """Nur das Abfragen — die Einordnung steht unten.
+
+        Ein Timeout oder ein 5xx flogen hier frueher als Test-*Error* auf und
+        wurden damit zu `finding`, also zu «der Vertrag hat sich geaendert».
+        Ueber den Vertrag sagt eine ausgebliebene Antwort nichts;
+        `live_attempt` wiederholt sie und ueberspringt danach. Ein HTTP 404
+        dagegen ist eine Antwort — «diesen Datensatz gibt es nicht mehr» — und
+        bleibt ein Fehlschlag.
+        """
+        found: dict[str, set[str]] = {}
+        async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+            for ds in datasets:
+                response = await client.get(f"{BASE_URL}/{ds}")
+                response.raise_for_status()
+                found[ds] = {f["name"] for f in response.json().get("fields", [])}
+        return found
+
+    live = await live_attempt(probe)
+
+    for ds in datasets:
+        assert live[ds], (
+            f"{ds}: Die Quelle deklariert keine Felder. Ohne Deklaration "
+            "lässt sich kein `select` mehr gegen sie halten — erst die "
+            "Quelle abfragen, dann einordnen."
+        )
 
     # 1. Produktiv kaputt: Ein Feld, das der Server verwendet, führt die Quelle
     #    heute nicht mehr. Jede Anfrage damit endet in HTTP 400.

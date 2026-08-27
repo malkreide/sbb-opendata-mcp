@@ -31,11 +31,20 @@ def write(tmp: Path, xml: str) -> Path:
     return path
 
 
-def suite(tests: int, failures: int = 0, errors: int = 0, skipped: int = 0) -> str:
+def suite(
+    tests: int, failures: int = 0, errors: int = 0, skipped: int = 0, reasons: list[str] | None = None
+) -> str:
+    """Ein JUnit-XML wie pytest es schreibt; `reasons` fuellt die Skip-Gruende."""
+    cases = "".join(
+        f'<testcase classname="t" name="test_{i}">'
+        f'<skipped type="pytest.skip" message="{r}">t.py:1: {r}</skipped>'
+        "</testcase>"
+        for i, r in enumerate(reasons or [])
+    )
     return (
         '<?xml version="1.0" encoding="utf-8"?>\n'
         f'<testsuites><testsuite name="pytest" tests="{tests}" failures="{failures}" '
-        f'errors="{errors}" skipped="{skipped}"></testsuite></testsuites>'
+        f'errors="{errors}" skipped="{skipped}">{cases}</testsuite></testsuites>'
     )
 
 
@@ -68,6 +77,71 @@ class ClassifyTest(unittest.TestCase):
         state, reason = self._state(suite(tests=6, skipped=5))
         self.assertEqual(state, clr.CLEAR)
         self.assertIn("1 von 6", reason)
+
+    def test_ein_bewusster_skip_bleibt_gruen(self):
+        """Die Gegenprobe zum Ausfall-Skip: ein Grund ohne Marker aendert nichts.
+
+        Ohne diesen Test koennte die Regel darunter auch «jeder Skip ist
+        unknown» lauten und bliebe gruen — dann waere jede bewusste
+        Vorbedingung ein Ausfall.
+        """
+        state, reason = self._state(suite(tests=6, skipped=1, reasons=["kein TRANSPORT_API_KEY gesetzt"]))
+        self.assertEqual(state, clr.CLEAR)
+        self.assertIn("5 von 6", reason)
+
+    def test_ausfall_skip_ist_nicht_gruen(self):
+        """26.8.2026: `test_live_search_waedenswil` lief ins 30-s-Zeitlimit.
+
+        Der Lauf wurde `finding`, `live.yml` machte Issue #48 auf und schrieb
+        hinein, der Vertrag mit der Quelle habe sich geaendert. Nachgemessen am
+        27.8.2026: dieselbe Anfrage, sechs Laeufe, 0.44 bis 0.80 s, HTTP 200.
+        Es hatte sich nichts geaendert.
+
+        Ueberspringt der Test stattdessen, darf daraus weder ein Befund noch
+        ein Freispruch werden: Genau dieser Teil des Vertrags wurde heute nicht
+        verglichen.
+        """
+        state, reason = self._state(
+            suite(
+                tests=6,
+                skipped=1,
+                reasons=[f"{clr.SOURCE_UNAVAILABLE}: data.sbb.ch hat in 3 Versuchen nicht geantwortet"],
+            )
+        )
+        self.assertEqual(state, clr.UNKNOWN)
+        self.assertIn("nicht geantwortet", reason)
+        self.assertIn("1 von 6", reason)
+
+    def test_totalausfall_nennt_die_quelle_und_nicht_das_secret(self):
+        """Beides `unknown` — aber nur eine der beiden Begruendungen stimmt.
+
+        Simuliert am 27.8.2026 mit unerreichbarer Basis-URL: alle sechs Tests
+        uebersprangen. Stuende die generische Regel zuerst, laese im Job-Log
+        «meist ein fehlendes Secret», waehrend die Quelle weg war.
+        """
+        state, reason = self._state(suite(tests=6, skipped=6, reasons=[clr.SOURCE_UNAVAILABLE] * 6))
+        self.assertEqual(state, clr.UNKNOWN)
+        self.assertIn("nicht geantwortet", reason)
+        self.assertNotIn("Secret", reason)
+
+    def test_ein_fehlschlag_schlaegt_den_ausfall_skip(self):
+        """Ein echter Befund neben einem Ausfall bleibt ein Befund.
+
+        Etwas ist gefallen, also ist etwas festgestellt — das gehoert gemeldet,
+        auch wenn ein anderer Test keine Antwort bekam.
+        """
+        state, _ = self._state(suite(tests=6, failures=1, skipped=1, reasons=[clr.SOURCE_UNAVAILABLE]))
+        self.assertEqual(state, clr.FINDING)
+
+    def test_ausfall_skip_wird_auch_ohne_message_attribut_erkannt(self):
+        """Der Marker steht im Attribut UND im Elementtext; eines genuegt."""
+        xml = (
+            '<testsuites><testsuite tests="6" failures="0" errors="0" skipped="1">'
+            f'<testcase classname="t" name="a"><skipped>t.py:1: {clr.SOURCE_UNAVAILABLE}</skipped></testcase>'
+            "</testsuite></testsuites>"
+        )
+        state, _ = self._state(xml)
+        self.assertEqual(state, clr.UNKNOWN)
 
     def test_null_tests_ist_kein_erfolg(self):
         """Die Marke umbenannt, die Dateien verschoben — pytest meldet trotzdem 0."""

@@ -376,6 +376,29 @@ async def _fetch_records(
     return data
 
 
+def _is_source_unavailable(e: Exception) -> bool:
+    """Hat die Quelle geantwortet — ja oder nein?
+
+    Der Unterschied entscheidet, was ein roter Live-Lauf bedeutet. Ein
+    Timeout, ein abgerissenes TCP, ein 429 oder ein 5xx heissen: **data.sbb.ch
+    hat nichts gesagt.** Daraus folgt nichts ueber den Feld-Vertrag — weder
+    dass er haelt noch dass er gebrochen ist.
+
+    Ein HTTP 400 dagegen ist eine Antwort, und zwar genau die aus dem Befund
+    vom 3.8.2026: Die Explore-API beantwortet ein Feld, das sie nicht mehr
+    fuehrt, mit 400 statt mit weniger Spalten. Ein 404 ist ebenso eine
+    Antwort («diesen Datensatz gibt es nicht mehr»). Beide sind Befunde und
+    duerfen hier **nie** als «Quelle war weg» durchgehen — sonst verschluckt
+    genau diese Funktion den Fehler, dessentwegen die Live-Suite existiert.
+    """
+    if isinstance(e, httpx.HTTPStatusError):
+        status = e.response.status_code
+        return status == 429 or status >= 500
+    # `TransportError` deckt Timeout, Verbindungsabbruch, Proxy- und
+    # Protokollfehler ab — alles Faelle ohne HTTP-Antwort.
+    return isinstance(e, httpx.TransportError)
+
+
 def _handle_api_error(e: Exception) -> str:
     """Consistent, actionable error messages for all tools.
 
@@ -430,9 +453,16 @@ def _tool_result(text: str, structured: dict[str, Any]) -> CallToolResult:
 
 
 def _err(e: Exception) -> CallToolResult:
-    """Wrap a handled error as a tool result (sanitized text + error flag)."""
+    """Wrap a handled error as a tool result (sanitized text + error flag).
+
+    ``upstream_unavailable`` trennt «die Quelle hat nicht geantwortet» von
+    «die Quelle hat etwas anderes geantwortet als erwartet». Ein Client kann
+    daran entscheiden, ob ein erneuter Versuch ueberhaupt Sinn hat, und die
+    Live-Suite entscheidet daran, ob ein roter Lauf etwas ueber den Vertrag
+    mit data.sbb.ch aussagt.
+    """
     msg = _handle_api_error(e)
-    return _tool_result(msg, {"error": msg})
+    return _tool_result(msg, {"error": msg, "upstream_unavailable": _is_source_unavailable(e)})
 
 
 def _pagination_meta(total: int, limit: int, offset: int) -> dict[str, Any]:
@@ -1317,7 +1347,10 @@ async def sbb_list_datasets() -> CallToolResult:
              Schema: {dataset_id, title, records_count, update_frequency, themes}
     """
     try:
-        url = "https://data.sbb.ch/api/explore/v2.1/catalog/datasets"
+        # `BASE_URL`, nicht das Literal noch einmal: Als zweite Kopie zeigte
+        # dieses Werkzeug als einziges weiter auf die alte Adresse, sobald die
+        # erste umzieht — und zwar still, weil es dann ja antwortet.
+        url = BASE_URL
         params = {"limit": 100, "order_by": ORDER_BY_CATALOG}
 
         client = await _get_client()
