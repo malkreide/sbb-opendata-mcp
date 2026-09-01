@@ -46,7 +46,7 @@ dev = [
     # pre-commit-Hooks rufen das ruff aus dem PATH statt ein eigenes `rev:`
     # mitzubringen. Anheben also genau hier — sonst nirgends.
     # `tests/test_werkzeug_versionen.py` haelt das fest, statt es zu behaupten.
-    "ruff==0.16.4",
+    "ruff==0.16.5",
 ]
 
 [project.scripts]
