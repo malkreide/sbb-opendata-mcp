@@ -284,8 +284,9 @@ wie der Code: Nichts ist rot, weil nichts geprüft wird, worauf es ankommt.
 
 ## Teil 2 — dieses Repo
 
-**ruff: eine Quelle — und zwar wörtlich eine.** Der Pin `0.16.3` steht
-ausschliesslich im `[dev]`-Extra von `pyproject.toml`. `ci.yml` installiert
+**ruff: eine Quelle — und zwar wörtlich eine.** Der Pin steht ausschliesslich
+im `[dev]`-Extra von `pyproject.toml`, dort exakt; die Version dort nachlesen,
+nicht hier. `ci.yml` installiert
 nur dieses Extra, `[tool.hatch.envs.default]` zieht es über
 `features = ["dev"]`, und die pre-commit-Hooks rufen das ruff aus dem `PATH`
 statt ein eigenes `rev:` mitzubringen. Anheben also genau dort — sonst
