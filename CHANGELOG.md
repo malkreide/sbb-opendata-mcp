@@ -5,6 +5,28 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-09-27
+
+### Beim Aktualisieren beachten
+
+Zwei Aenderungen sieht ein Client, der bisher funktioniert hat:
+
+- **Fehler kommen jetzt als Fehler an.** Bis 0.3.4 trug kein Werkzeugfehler
+  `isError` — Timeout, 404 und 400 der Quelle gingen als Erfolg hinaus, nur der
+  Text begann mit «Fehler». Wer am Flag entscheidet, sah bisher einen Treffer
+  und sieht jetzt `isError: true` mit `{error, upstream_unavailable}` im
+  `structuredContent`.
+- **Ein Werkzeug weniger.** `sbb_get_infrastructure_construction_projects` ist
+  entfernt: Sein Datensatz `construction-projects` antwortet mit HTTP 404 und
+  hat keinen Nachfolger. Funktioniert hat es unter 0.3.4 fuer keine Anfrage;
+  ein Aufruf endet jetzt an «unbekanntes Werkzeug» statt an einem Fehler der
+  Quelle.
+
+Neu, ohne dass sich etwas Bestehendes aendert: jedes Werkzeug deklariert ein
+`outputSchema` und einen `title`, `serverInfo` traegt die Version. Die Minor-
+statt Patch-Nummer steht fuer diese Summe — ein entferntes Werkzeug und ein
+anders gesetztes Fehlerflag sind kein Fix unter derselben Schnittstelle.
+
 ### Behoben — jeder Werkzeugfehler ging als Erfolg hinaus
 
 `_err()` versprach im Docstring ein «error flag» und setzte keines. Ein Timeout,
