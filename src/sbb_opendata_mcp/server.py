@@ -13,13 +13,13 @@ import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from enum import StrEnum
-from typing import Any
+from typing import Annotated, Any
 
 import httpx
 from mcp.server.caching import CacheableMethod, CacheHint
 from mcp.server.mcpserver import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
-from mcp.types import CallToolResult, TextContent
+from mcp.types import CallToolResult, TextContent, ToolAnnotations
 from pydantic import BaseModel, ConfigDict, Field
 
 from . import __version__
@@ -287,8 +287,19 @@ CACHE_HINTS: dict[CacheableMethod, CacheHint] = {
     "server/discover": CacheHint(ttl_ms=LIST_CACHE_TTL_MS, scope="public"),
 }
 
+# `serverInfo` vollstaendig, nicht nur der Name. Ab `2026-07-28` stempelt das
+# SDK es als `_meta["io.modelcontextprotocol/serverInfo"]` auf JEDES Resultat —
+# ohne `version=` stand dort bei jeder Antwort `"version": ""`. Der Wert kommt
+# aus den Paket-Metadaten, wie beim User-Agent; ein Literal hier waere die
+# zweite Wahrheit, die `scripts/check_version_sync.py` in `src/` verbietet.
+PROJECT_URL = "https://github.com/malkreide/sbb-opendata-mcp"
+
 mcp = MCPServer(
     "sbb_opendata_mcp",
+    title="SBB Open Data",
+    description="Swiss Federal Railways (SBB) open data from data.sbb.ch, read-only.",
+    version=__version__,
+    website_url=PROJECT_URL,
     cache_hints=CACHE_HINTS,
     instructions=(
         "SBB Open Data MCP Server: Access Swiss Federal Railways open data. "
@@ -443,8 +454,10 @@ def _tool_result(text: str, structured: dict[str, Any]) -> CallToolResult:
     The text block preserves the existing markdown/JSON output (non-breaking over
     MCP), while ``structuredContent`` exposes the underlying records/metadata so
     programmatic clients can consume them without re-parsing the rendered string.
-    Tools using this set ``structured_output=False`` so MCPServer forwards the
-    result unchanged instead of deriving a trivial ``{"result": <str>}`` schema.
+    Each tool declares its shape as ``Annotated[CallToolResult, <Output model>]``:
+    MCPServer then publishes the model as ``outputSchema`` and validates
+    ``structuredContent`` against it before the result leaves the server. Error
+    results (``isError``) are exempt on both ends, per spec.
     """
     return CallToolResult(
         content=[TextContent(type="text", text=text)],
@@ -462,7 +475,15 @@ def _err(e: Exception) -> CallToolResult:
     mit data.sbb.ch aussagt.
     """
     msg = _handle_api_error(e)
-    return _tool_result(msg, {"error": msg, "upstream_unavailable": _is_source_unavailable(e)})
+    # `isError` stand bis hier nicht da: jeder Fehler ging als Erfolg hinaus,
+    # nur der Text sagte «Fehler». Ein Client, der am Flag entscheidet — und
+    # das SDK, das Fehlerresultate von der `outputSchema`-Pruefung ausnimmt —
+    # sah einen Treffer.
+    return CallToolResult(
+        content=[TextContent(type="text", text=msg)],
+        structuredContent={"error": msg, "upstream_unavailable": _is_source_unavailable(e)},
+        isError=True,
+    )
 
 
 def _pagination_meta(total: int, limit: int, offset: int) -> dict[str, Any]:
@@ -632,22 +653,97 @@ class StationSearchInput(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Output models — published as `outputSchema`
+# ---------------------------------------------------------------------------
+#
+# Seit `2025-06-18` darf ein Werkzeug die Form seines `structuredContent`
+# deklarieren; wer eines deklariert, MUSS sich daran halten. Dieser Server
+# lieferte `structuredContent` von Anfang an, aber ohne Schema — ein Client sah
+# ein Objekt und musste raten, was darin steht.
+#
+# Typisiert ist, was der Server selbst baut (Paginierung, Vergleichszeilen,
+# Umschlag). Die Datensaetze der Quelle bleiben `dict[str, Any]`: ihre Felder
+# haelt `TestFieldContract` gegen die Aufzeichnung und die Live-Suite gegen
+# die Quelle. Ein zweiter, strengerer Vertrag hier wuerde bei einer Drift der
+# Quelle nicht den Test rot machen, sondern jeden Aufruf — das SDK validiert
+# vor dem Versand und antwortet bei Abweichung mit einem Werkzeugfehler.
+
+
+class PaginationOutput(BaseModel):
+    total_count: int
+    returned: int
+    offset: int
+    has_more: bool
+    next_offset: int | None
+
+
+class PagedRecordsOutput(BaseModel):
+    """A page of raw data.sbb.ch records plus pagination."""
+
+    pagination: PaginationOutput
+    results: list[dict[str, Any]] = Field(description="Records as returned by data.sbb.ch")
+
+
+class StationComparisonOutput(BaseModel):
+    """One requested station. Only `name` is guaranteed: the rest is absent
+    when the source had no passenger-frequency or platform match."""
+
+    name: str = Field(description="Station name as requested")
+    matched_name: str | None = None
+    year: str | int | None = None
+    dtv: float | None = Field(default=None, description="Average daily passengers")
+    dwv: float | None = Field(default=None, description="Average workday passengers")
+    canton: str | None = None
+    platform_count: int | None = None
+    total_platform_length_m: int | None = None
+
+
+class CompareStationsOutput(BaseModel):
+    year: str
+    stations: list[StationComparisonOutput]
+
+
+class StationSearchOutput(BaseModel):
+    total_count: int
+    results: list[dict[str, Any]] = Field(description="DiDok records as returned by data.sbb.ch")
+
+
+class DatasetListOutput(BaseModel):
+    total_count: int
+    datasets: list[dict[str, Any]] = Field(description="Catalog entries as returned by data.sbb.ch")
+
+
+def _read_only_tool(title: str, *, idempotent: bool = True) -> dict[str, Any]:
+    """`title` UND `annotations.title` aus einer Quelle.
+
+    Seit `2025-06-18` gilt fuer die Anzeige `title` vor `annotations.title` vor
+    `name`. Aeltere Clients kennen nur `annotations.title`, also stehen beide —
+    und zwar als ein Wert, damit sie nicht auseinanderlaufen koennen.
+    """
+    return {
+        "title": title,
+        "annotations": ToolAnnotations(
+            title=title,
+            read_only_hint=True,
+            destructive_hint=False,
+            idempotent_hint=idempotent,
+            open_world_hint=True,
+        ),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Tools
 # ---------------------------------------------------------------------------
 
 
 @mcp.tool(
     name="sbb_get_passenger_frequency",
-    annotations={
-        "title": "SBB Passagierfrequenz nach Bahnhof",
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": True,
-    },
-    structured_output=False,
+    **_read_only_tool("SBB Passagierfrequenz nach Bahnhof"),
 )
-async def sbb_get_passenger_frequency(params: PassengerFrequencyInput) -> CallToolResult:
+async def sbb_get_passenger_frequency(
+    params: PassengerFrequencyInput,
+) -> Annotated[CallToolResult, PagedRecordsOutput]:
     """Ruft Passagierfrequenzdaten (Ein-/Aussteigende) für SBB-Bahnhöfe ab.
 
     Datensatz wird jährlich aktualisiert. Enthält Tagesschnitt (DTV),
@@ -734,16 +830,11 @@ async def sbb_get_passenger_frequency(params: PassengerFrequencyInput) -> CallTo
 
 @mcp.tool(
     name="sbb_get_rail_disruptions",
-    annotations={
-        "title": "SBB Bahnverkehrsstörungen (Live)",
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": False,
-        "openWorldHint": True,
-    },
-    structured_output=False,
+    **_read_only_tool("SBB Bahnverkehrsstörungen (Live)", idempotent=False),
 )
-async def sbb_get_rail_disruptions(params: RailDisruptionsInput) -> CallToolResult:
+async def sbb_get_rail_disruptions(
+    params: RailDisruptionsInput,
+) -> Annotated[CallToolResult, PagedRecordsOutput]:
     """Ruft aktuelle Bahnverkehrsstörungen und -meldungen ab (alle 5 Minuten aktualisiert).
 
     Enthält Titel, Beschreibung, Ursache, Start-/Endzeitpunkt und betroffene Linien.
@@ -814,16 +905,11 @@ async def sbb_get_rail_disruptions(params: RailDisruptionsInput) -> CallToolResu
 
 @mcp.tool(
     name="sbb_get_real_estate_projects",
-    annotations={
-        "title": "SBB Immobilien-Bauprojekte",
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": True,
-    },
-    structured_output=False,
+    **_read_only_tool("SBB Immobilien-Bauprojekte"),
 )
-async def sbb_get_real_estate_projects(params: RealEstateProjectsInput) -> CallToolResult:
+async def sbb_get_real_estate_projects(
+    params: RealEstateProjectsInput,
+) -> Annotated[CallToolResult, PagedRecordsOutput]:
     """Ruft laufende SBB-Immobilien-Bauprojekte (Wohn- und Geschäftsbauten) ab.
 
     Täglich aktualisiert. Enthält Projektname, Stadt, Bauphase, Nutzfläche,
@@ -904,16 +990,11 @@ async def sbb_get_real_estate_projects(params: RealEstateProjectsInput) -> CallT
 
 @mcp.tool(
     name="sbb_get_trains_per_segment",
-    annotations={
-        "title": "SBB Züge pro Streckenabschnitt",
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": True,
-    },
-    structured_output=False,
+    **_read_only_tool("SBB Züge pro Streckenabschnitt"),
 )
-async def sbb_get_trains_per_segment(params: TrainsPerSegmentInput) -> CallToolResult:
+async def sbb_get_trains_per_segment(
+    params: TrainsPerSegmentInput,
+) -> Annotated[CallToolResult, PagedRecordsOutput]:
     """Ruft Anzahl Züge pro Streckenabschnitt und Verkehrstyp ab.
 
     Deckt SBB, BLS, SOB, DB und weitere Infrastrukturbetreiberinnen ab.
@@ -992,16 +1073,9 @@ async def sbb_get_trains_per_segment(params: TrainsPerSegmentInput) -> CallToolR
 
 @mcp.tool(
     name="sbb_get_platform_data",
-    annotations={
-        "title": "SBB Perrondaten",
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": True,
-    },
-    structured_output=False,
+    **_read_only_tool("SBB Perrondaten"),
 )
-async def sbb_get_platform_data(params: PlatformDataInput) -> CallToolResult:
+async def sbb_get_platform_data(params: PlatformDataInput) -> Annotated[CallToolResult, PagedRecordsOutput]:
     """Ruft Perrondaten (Länge, Fläche, Typ) für SBB-Bahnhöfe ab.
 
     Enthält Perronlänge (m), Netto-/Bruttofläche (m²), Perrontyp und
@@ -1073,16 +1147,9 @@ async def sbb_get_platform_data(params: PlatformDataInput) -> CallToolResult:
 
 @mcp.tool(
     name="sbb_get_rolling_stock",
-    annotations={
-        "title": "SBB Rollmaterial",
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": True,
-    },
-    structured_output=False,
+    **_read_only_tool("SBB Rollmaterial"),
 )
-async def sbb_get_rolling_stock(params: RollingStockInput) -> CallToolResult:
+async def sbb_get_rolling_stock(params: RollingStockInput) -> Annotated[CallToolResult, PagedRecordsOutput]:
     """Ruft technische Daten zum SBB-Rollmaterial (Züge, Triebzüge, Wagen) ab.
 
     Enthält Fahrzeugtyp, Sitzplatzkapazität (1./2. Kl.), Baujahr, Länge und Gewicht.
@@ -1150,16 +1217,11 @@ async def sbb_get_rolling_stock(params: RollingStockInput) -> CallToolResult:
 
 @mcp.tool(
     name="sbb_compare_stations",
-    annotations={
-        "title": "SBB Bahnhöfe vergleichen",
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": True,
-    },
-    structured_output=False,
+    **_read_only_tool("SBB Bahnhöfe vergleichen"),
 )
-async def sbb_compare_stations(params: CompareStationsInput) -> CallToolResult:
+async def sbb_compare_stations(
+    params: CompareStationsInput,
+) -> Annotated[CallToolResult, CompareStationsOutput]:
     """Vergleicht mehrere SBB-Bahnhöfe anhand Passagierfrequenz und Perrondaten.
 
     Kombiniert drei Datensätze (Passagierfrequenz, Bahnhofnutzer, Perrons) zu einem
@@ -1247,16 +1309,9 @@ async def sbb_compare_stations(params: CompareStationsInput) -> CallToolResult:
 
 @mcp.tool(
     name="sbb_search_stations",
-    annotations={
-        "title": "SBB Haltestellen suchen",
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": True,
-    },
-    structured_output=False,
+    **_read_only_tool("SBB Haltestellen suchen"),
 )
-async def sbb_search_stations(params: StationSearchInput) -> CallToolResult:
+async def sbb_search_stations(params: StationSearchInput) -> Annotated[CallToolResult, StationSearchOutput]:
     """Sucht Bahnhöfe und Haltestellen der Schweiz (DiDok-Liste des BAV).
 
     Deckt alle öV-Haltestellen ab (nicht nur SBB). Enthält UIC-Nummern,
@@ -1327,16 +1382,9 @@ async def sbb_search_stations(params: StationSearchInput) -> CallToolResult:
 
 @mcp.tool(
     name="sbb_list_datasets",
-    annotations={
-        "title": "SBB Open Data Datensätze auflisten",
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": True,
-    },
-    structured_output=False,
+    **_read_only_tool("SBB Open Data Datensätze auflisten"),
 )
-async def sbb_list_datasets() -> CallToolResult:
+async def sbb_list_datasets() -> Annotated[CallToolResult, DatasetListOutput]:
     """Listet alle verfügbaren SBB Open Data Datensätze (data.sbb.ch) auf.
 
     Gibt Dataset-ID, Titel, Anzahl Datensätze und Aktualisierungsfrequenz zurück.

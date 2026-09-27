@@ -28,22 +28,28 @@ Nachgemessen statt aus Konstantennamen geschlossen: die Aushandlung steht in
 
 — sie haengt an keinem Transport, gilt also fuer stdio ebenso wie fuer HTTP.
 
-Ohne gemessenen Teil: dieses Repo baut keine ASGI-App, durch die sich ein
-`initialize` schicken liesse. Die Zusicherungen unten haengen deshalb an den
-SDK-Konstanten. Das ist die schwaechere Form, und sie steht hier benannt statt
-unausgesprochen.
+Die Konstanten allein waren die schwaechere Form: hier stand, dieses Repo baue
+keine ASGI-App, durch die sich ein `initialize` schicken liesse. Das stimmte
+nicht — `mcp.streamable_http_app()` ist genau die App, die `main()` unter
+`--http` serviert. Die beiden Draht-Tests am Ende schicken je Aera eine echte
+Anfrage hindurch und lesen die Revision aus der Antwort.
 """
 
 from __future__ import annotations
 
+import json
 import pathlib
 import re
 
+import httpx
 from mcp.types.version import (
     LATEST_HANDSHAKE_VERSION,
     LATEST_MODERN_VERSION,
     LATEST_PROTOCOL_VERSION,
 )
+
+from sbb_opendata_mcp import __version__
+from sbb_opendata_mcp.server import _transport_security, mcp
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 
@@ -119,3 +125,70 @@ def test_beide_readmes_nennen_dieselben_beiden_revisionen() -> None:
         body = parts[1][:2500]
         for value in (DOCUMENTED_HANDSHAKE_VERSION, DOCUMENTED_MODERN_VERSION):
             assert value in body, f"{name} nennt {value} nicht im Abschnitt «{anchor}»"
+
+
+# ---------------------------------------------------------------------------
+# Draht: dieselbe App, die `main()` unter `--http` serviert
+# ---------------------------------------------------------------------------
+
+ACCEPT = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
+
+
+async def _post(body: dict, headers: dict[str, str]) -> httpx.Response:
+    app = mcp.streamable_http_app(transport_security=_transport_security("127.0.0.1"))
+    async with mcp.session_manager.run():
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1") as client:
+            return await client.post("/mcp", json=body, headers={**ACCEPT, **headers})
+
+
+def _jsonrpc(response: httpx.Response) -> dict:
+    """JSON oder SSE — die Handshake-Aera antwortet per Default als Stream."""
+    if response.headers["content-type"].startswith("text/event-stream"):
+        data = [line[5:].strip() for line in response.text.splitlines() if line.startswith("data:")]
+        return json.loads(data[-1])
+    return response.json()
+
+
+async def test_draht_moderne_aera_ueber_server_discover() -> None:
+    """Ein 2026-07-28-POST ohne Handshake und ohne Session: eine Anfrage rein,
+    eine Antwort raus. `serverInfo` kommt dabei im `_meta` jedes Resultats."""
+    meta = {
+        "io.modelcontextprotocol/protocolVersion": DOCUMENTED_MODERN_VERSION,
+        "io.modelcontextprotocol/clientInfo": {"name": "gate", "version": "0"},
+        "io.modelcontextprotocol/clientCapabilities": {},
+    }
+    response = await _post(
+        {"jsonrpc": "2.0", "id": 1, "method": "server/discover", "params": {"_meta": meta}},
+        {"MCP-Protocol-Version": DOCUMENTED_MODERN_VERSION, "Mcp-Method": "server/discover"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert "mcp-session-id" not in response.headers
+    result = _jsonrpc(response)["result"]
+    assert DOCUMENTED_MODERN_VERSION in result["supportedVersions"]
+    assert result["resultType"] == "complete"
+    assert result["_meta"]["io.modelcontextprotocol/serverInfo"]["version"] == __version__
+
+
+async def test_draht_handshake_deckelt_bei_der_dokumentierten_revision() -> None:
+    """Ein Client, der per `initialize` etwas Neueres verlangt, bekommt die
+    Obergrenze der Handshake-Aera — so steht es in beiden READMEs."""
+    response = await _post(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": DOCUMENTED_MODERN_VERSION,
+                "capabilities": {},
+                "clientInfo": {"name": "gate", "version": "0"},
+            },
+        },
+        {},
+    )
+
+    assert response.status_code == 200, response.text
+    result = _jsonrpc(response)["result"]
+    assert result["protocolVersion"] == DOCUMENTED_HANDSHAKE_VERSION
+    assert result["serverInfo"]["version"] == __version__

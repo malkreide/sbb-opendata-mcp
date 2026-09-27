@@ -201,7 +201,9 @@ python -m sbb_opendata_mcp.server --http --port 8000
 
 All tools support `response_format: "markdown"` (human-readable) and `"json"`
 (machine-readable), plus pagination. Every tool also returns MCP `structuredContent`
-(the underlying records/metadata) alongside the rendered text.
+(the underlying records/metadata) alongside the rendered text, and declares its shape
+as `outputSchema`. Error results carry `isError: true` and
+`{error, upstream_unavailable}` instead.
 
 ### Example Use Cases
 
@@ -302,9 +304,18 @@ other era is refused.
 Both revisions are pinned in
 [`tests/test_protocol_version.py`](tests/test_protocol_version.py) and asserted
 against the installed SDK, so a Dependabot bump of `mcp` cannot move either one
-silently. This server builds no ASGI app to send an `initialize` through, so
-the gate asserts the SDK constants rather than a measured response — the
-weaker form, named rather than left unsaid.
+silently. Two wire tests send a real request per era through
+`mcp.streamable_http_app()` — the app `--http` serves — and read the revision
+from the response: a `2026-07-28` `server/discover` POST without session, and an
+`initialize` asking for `2026-07-28` that comes back capped at `2025-11-25`.
+
+What the server itself contributes to `2026-07-28`, beyond what the SDK does on
+its own, is pinned in
+[`tests/test_spec_2026_07_28.py`](tests/test_spec_2026_07_28.py): a complete
+`serverInfo` (the modern era stamps it on every result — without `version` it
+read `""`), a top-level `title` on every tool, an `outputSchema` per tool that
+both the server and the SDK client validate against, and `ttlMs`/`cacheScope`
+on the listing methods.
 
 Note that the SDK's `LATEST_PROTOCOL_VERSION` is an alias for the **modern**
 era, not for the handshake era — pinning against it alone would leave the era
