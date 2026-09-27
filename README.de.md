@@ -204,7 +204,9 @@ python -m sbb_opendata_mcp.server --http --port 8000
 
 Alle Tools unterstützen `response_format: "markdown"` (lesbar) und `"json"`
 (maschinenlesbar) sowie Paginierung. Zusätzlich liefert jedes Tool MCP-`structuredContent`
-(die zugrunde liegenden Datensätze/Metadaten) parallel zum gerenderten Text.
+(die zugrunde liegenden Datensätze/Metadaten) parallel zum gerenderten Text und deklariert
+dessen Form als `outputSchema`. Fehlerresultate tragen stattdessen `isError: true` und
+`{error, upstream_unavailable}`.
 
 ### Beispiel-Anwendungsfälle
 
@@ -305,9 +307,19 @@ aus der jeweils anderen Aera wird abgewiesen.
 Beide Revisionen sind in
 [`tests/test_protocol_version.py`](tests/test_protocol_version.py) gepinnt und
 werden gegen das installierte SDK geprueft; ein Dependabot-Bump von `mcp` kann
-also keine der beiden still verschieben. Dieser Server baut keine ASGI-App, durch die sich ein `initialize`
-schicken liesse; das Gate sichert deshalb die SDK-Konstanten statt einer
-gemessenen Antwort — die schwaechere Form, benannt statt verschwiegen.
+also keine der beiden still verschieben. Zwei Draht-Tests schicken je Aera eine
+echte Anfrage durch `mcp.streamable_http_app()` — die App, die `--http` serviert —
+und lesen die Revision aus der Antwort: ein `2026-07-28`-POST auf
+`server/discover` ohne Session, und ein `initialize`, das `2026-07-28` verlangt
+und bei `2025-11-25` gedeckelt zurueckkommt.
+
+Was der Server selbst zu `2026-07-28` beitraegt, ueber das hinaus, was das SDK
+von sich aus tut, haelt
+[`tests/test_spec_2026_07_28.py`](tests/test_spec_2026_07_28.py) fest: ein
+vollstaendiges `serverInfo` (die moderne Aera stempelt es auf jedes Resultat —
+ohne `version` stand dort `""`), ein `title` auf jedem Werkzeug, ein
+`outputSchema` je Werkzeug, gegen das Server und SDK-Client pruefen, sowie
+`ttlMs`/`cacheScope` auf den auflistenden Methoden.
 
 Zu beachten: `LATEST_PROTOCOL_VERSION` im SDK ist ein Alias auf die **moderne**
 Aera, nicht auf die Handshake-Aera — wer nur dagegen pinnt, laesst genau die

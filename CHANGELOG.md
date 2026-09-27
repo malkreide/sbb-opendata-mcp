@@ -5,6 +5,44 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Behoben — jeder Werkzeugfehler ging als Erfolg hinaus
+
+`_err()` versprach im Docstring ein «error flag» und setzte keines. Ein Timeout,
+ein 404, ein 400 der Quelle: alles kam als Resultat ohne `isError` beim Client an,
+nur der Text begann mit «Fehler». Ein Client, der am Flag entscheidet, sah einen
+Treffer. Der Test dazu hiess `test_error_result_flagged_in_structured_content`
+und pruefte den Text. Er prueft jetzt das Flag; ohne `isError=True` faellt er.
+
+Aufgefallen ist es erst am `outputSchema` unten: das SDK nimmt Fehlerresultate
+von der Schema-Pruefung aus — und nur Fehlerresultate. Der Fehlerkoerper
+`{error, upstream_unavailable}` passt in kein Erfolgsschema, der Aufruf wurde
+zum internen Fehler.
+
+### Hinzugefuegt — Spec `2026-07-28` nativ
+
+`mcp` 2.x spricht die Revision von sich aus. Drei Dinge liefert es aber nur,
+wenn der Server sie angibt, und ohne Angabe sieht die Antwort trotzdem gueltig
+aus:
+
+- **`serverInfo` vollstaendig.** Die moderne Aera stempelt es als
+  `_meta["io.modelcontextprotocol/serverInfo"]` auf **jedes** Resultat; ohne
+  `version=` stand dort jedes Mal `"version": ""`. Jetzt Paketversion (aus den
+  Metadaten, nicht als Literal), `title`, `description`, `websiteUrl`.
+- **`title` auf jedem Werkzeug.** Anzeige-Reihenfolge ist `title`, dann
+  `annotations.title`, dann `name`; gesetzt war nur das mittlere. Beide kommen
+  jetzt aus einem Wert (`_read_only_tool()`), damit sie nicht auseinanderlaufen.
+- **`outputSchema` je Werkzeug.** `structuredContent` gab es schon, aber ohne
+  Schema. Typisiert ist, was der Server baut (Paginierung, Umschlag,
+  Vergleichszeilen); die Datensaetze der Quelle bleiben `dict[str, Any]` — ihre
+  Felder haelt der Feld-Vertrag, und ein zweiter, strengerer Vertrag hier
+  machte bei einer Drift nicht einen Test rot, sondern jeden Aufruf.
+
+`tests/test_spec_2026_07_28.py` prueft das ueber einen echten `Client`, der
+`structuredContent` selbst gegen das gelistete Schema validiert — in beiden
+Aeren, fuer alle neun Werkzeuge. Gegenprobe: eine Quelle, deren Antwort nicht
+ins Schema passt, endet als Fehler statt als Erfolg. Jede Zusicherung ist
+einzeln neutralisiert worden; es fielen genau die zugehoerigen Tests.
+
 ### Behoben — ein Timeout ist kein gebrochener Vertrag
 
 Am 26.8.2026 lief `test_live_search_waedenswil` in das 30-s-Zeitlimit. Der Lauf
@@ -69,9 +107,10 @@ Literal genau einmal vorkommt.
   aushandeln. Beide sind jetzt einzeln gepinnt, ein Dependabot-Bump von
   `mcp` kann keine davon still verschieben.
 
-  Ohne gemessenen Teil: dieser Server baut keine ASGI-App, durch die sich ein
-  `initialize` schicken liesse. Das Gate haengt deshalb an den SDK-Konstanten —
-  die schwaechere Form, im Docstring benannt statt verschwiegen.
+  Zuerst hiess es hier, der Server baue keine ASGI-App, durch die sich ein
+  `initialize` schicken liesse. Das stimmte nicht: `mcp.streamable_http_app()`
+  ist genau die App, die `--http` serviert. Zwei Draht-Tests schicken jetzt je
+  Aera eine echte Anfrage hindurch und lesen die Revision aus der Antwort.
 
   Beide READMEs beschreiben die Aeren; ein Test haelt jede Sprache einzeln
   dagegen — im Portfolio sind EN und DE desselben Repos schon dreimal

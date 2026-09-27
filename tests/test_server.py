@@ -887,6 +887,9 @@ class TestStructuredOutput:
             result = await sbb_get_rolling_stock(RollingStockInput())
         assert "error" in result.structured_content
         assert "Fehler" in result.content[0].text
+        # Der Name des Tests versprach das Flag; geprueft wurde nur der Text,
+        # und `isError` fehlte — jeder Fehler ging als Erfolg hinaus.
+        assert result.is_error is True
 
 
 # ---------------------------------------------------------------------------
